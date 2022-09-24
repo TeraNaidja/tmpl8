@@ -31,11 +31,6 @@ mat4& mat4::operator+=(const mat4& a)
 	return *this;
 }
 
-bool mat4::operator==(const mat4& m) const
-{
-	for (int i = 0; i < 16; i++) if (m.cell[i] != cell[i]) return false; return true;
-}
-
 float3 mat4::GetTranslation() const
 { return make_float3(cell[3], cell[7], cell[11]); }
 

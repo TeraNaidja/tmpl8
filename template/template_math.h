@@ -574,7 +574,6 @@ namespace Tmpl8
 		float operator()(const int i, const int j) const { return cell[i * 4 + j]; }
 		float& operator()(const int i, const int j) { return cell[i * 4 + j]; }
 		mat4& operator += (const mat4& a);
-		bool operator==(const mat4& m) const;
 		[[nodiscard]] float3 GetTranslation() const;
 
 		static mat4 FromColumnMajor(const mat4& T);
