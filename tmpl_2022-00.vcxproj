@@ -128,12 +128,19 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">precomp.h</PrecompiledHeaderFile>
     </ClCompile>
+    <ClCompile Include="template\template_cl.cpp" />
+    <ClCompile Include="template\template_gl.cpp" />
+    <ClCompile Include="template\template_math.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cl\tools.cl" />
     <ClInclude Include="game.h" />
+    <ClInclude Include="template\template.h" />
     <ClInclude Include="template\common.h" />
     <ClInclude Include="template\precomp.h" />
+    <ClInclude Include="template\template_cl.h" />
+    <ClInclude Include="template\template_gl.h" />
+    <ClInclude Include="template\template_math.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cl\kernels.cl" />

@@ -2,6 +2,66 @@
 // IGAD/NHTV/UU - Jacco Bikker - 2006-2022
 
 #include "precomp.h"
+#include "template.h"
+
+#include "template_gl.h"
+#include "template_cl.h"
+
+#include "game.h"
+
+//// windows.h: disable as much as possible to speed up compilation.
+#define NOMINMAX
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#define VC_EXTRALEAN
+#endif
+#define NOGDICAPMASKS
+// #define NOVIRTUALKEYCODES
+#define NOWINMESSAGES
+#define NOWINSTYLES
+#define NOSYSMETRICS
+#define NOMENUS
+#define NOICONS
+#define NOKEYSTATES
+#define NOSYSCOMMANDS
+#define NORASTEROPS
+#define NOSHOWWINDOW
+#define OEMRESOURCE
+#define NOATOM
+#define NOCLIPBOARD
+#define NOCOLOR
+#define NOCTLMGR
+#define NODRAWTEXT
+#define NOKERNEL
+#define NONLS
+#define NOMEMMGR
+#define NOMETAFILE
+#define NOMINMAX
+#define NOMSG
+#define NOOPENFILE
+#define NOSCROLL
+#define NOSERVICE
+#define NOSOUND
+#define NOTEXTMETRIC
+#define NOWH
+#define NOWINOFFSETS
+#define NOCOMM
+#define NOKANJI
+#define NOHELP
+#define NOPROFILER
+#define NODEFERWINDOWPOS
+#define NOMCX
+#define NOIME
+
+#ifdef APIENTRY
+#undef APIENTRY
+#endif
+#define GLFW_EXPOSE_NATIVE_WIN32
+#define GLFW_EXPOSE_NATIVE_WGL
+#include <GLFW/glfw3native.h>
+
+//Windows leaks defines, so we don't want this anymore...
+#undef LoadImage
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_NO_PSD
@@ -10,6 +70,7 @@
 #include "lib/stb_image.h"
 
 #pragma comment( linker, "/subsystem:windows /ENTRY:mainCRTStartup" )
+
 
 using namespace Tmpl8;
 
@@ -110,7 +171,6 @@ void main()
 	glDisable( GL_DEPTH_TEST );
 	glDisable( GL_CULL_FACE );
 	glDisable( GL_BLEND );
-	CheckGL();
 	// we want a console window for text output
 #ifndef FULLSCREEN
 	CONSOLE_SCREEN_BUFFER_INFO coninfo;
@@ -262,7 +322,7 @@ void main()
 	static Timer timer;
 	while (!glfwWindowShouldClose( window ))
 	{
-		deltaTime = min( 500.0f, 1000.0f * timer.elapsed() );
+		deltaTime = std::min( 500.0f, 1000.0f * timer.elapsed() );
 		timer.reset();
 		app->Tick( deltaTime );
 		// send the rendering result to the screen using OpenGL
@@ -285,384 +345,148 @@ void main()
 	glfwTerminate();
 }
 
-// Jobmanager implementation
-DWORD JobThreadProc( LPVOID lpParameter )
-{
-	JobThread* JobThreadInstance = (JobThread*)lpParameter;
-	JobThreadInstance->BackgroundTask();
-	return 0;
-}
-
-void JobThread::CreateAndStartThread( unsigned int threadId )
-{
-	m_GoSignal = CreateEvent( 0, FALSE, FALSE, 0 );
-	m_ThreadHandle = CreateThread( 0, 0, (LPTHREAD_START_ROUTINE)&JobThreadProc, (LPVOID)this, 0, 0 );
-	m_ThreadID = threadId;
-}
-void JobThread::BackgroundTask()
-{
-	while (1)
-	{
-		WaitForSingleObject( m_GoSignal, INFINITE );
-		while (1)
-		{
-			Job* job = JobManager::GetJobManager()->GetNextJob();
-			if (!job)
-			{
-				JobManager::GetJobManager()->ThreadDone( m_ThreadID );
-				break;
-			}
-			job->RunCodeWrapper();
-		}
-	}
-}
-
-void JobThread::Go()
-{
-	SetEvent( m_GoSignal );
-}
-
-void Job::RunCodeWrapper()
-{
-	Main();
-}
-
-JobManager* JobManager::m_JobManager = 0;
-
-JobManager::JobManager( unsigned int threads ) : m_NumThreads( threads )
-{
-	InitializeCriticalSection( &m_CS );
-}
-
-JobManager::~JobManager()
-{
-	DeleteCriticalSection( &m_CS );
-}
-
-void JobManager::CreateJobManager( unsigned int numThreads )
-{
-	m_JobManager = new JobManager( numThreads );
-	m_JobManager->m_JobThreadList = new JobThread[numThreads];
-	for (unsigned int i = 0; i < numThreads; i++)
-	{
-		m_JobManager->m_JobThreadList[i].CreateAndStartThread( i );
-		m_JobManager->m_ThreadDone[i] = CreateEvent( 0, FALSE, FALSE, 0 );
-	}
-	m_JobManager->m_JobCount = 0;
-}
-
-void JobManager::AddJob2( Job* a_Job )
-{
-	m_JobList[m_JobCount++] = a_Job;
-}
-
-Job* JobManager::GetNextJob()
-{
-	Job* job = 0;
-	EnterCriticalSection( &m_CS );
-	if (m_JobCount > 0) job = m_JobList[--m_JobCount];
-	LeaveCriticalSection( &m_CS );
-	return job;
-}
-
-void JobManager::RunJobs()
-{
-	if (m_JobCount == 0) return;
-	for (unsigned int i = 0; i < m_NumThreads; i++) m_JobThreadList[i].Go();
-	WaitForMultipleObjects( m_NumThreads, m_ThreadDone, TRUE, INFINITE );
-}
-
-void JobManager::ThreadDone( unsigned int n )
-{
-	SetEvent( m_ThreadDone[n] );
-}
-
-DWORD CountSetBits( ULONG_PTR bitMask )
-{
-	DWORD LSHIFT = sizeof( ULONG_PTR ) * 8 - 1, bitSetCount = 0;
-	ULONG_PTR bitTest = (ULONG_PTR)1 << LSHIFT;
-	for (DWORD i = 0; i <= LSHIFT; ++i) bitSetCount += ((bitMask & bitTest) ? 1 : 0), bitTest /= 2;
-	return bitSetCount;
-}
-
-void JobManager::GetProcessorCount( uint& cores, uint& logical )
-{
-	// https://github.com/GPUOpen-LibrariesAndSDKs/cpu-core-counts
-	cores = logical = 0;
-	char* buffer = NULL;
-	DWORD len = 0;
-	if (FALSE == GetLogicalProcessorInformationEx( RelationAll, (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)buffer, &len ))
-	{
-		if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
-		{
-			buffer = (char*)malloc( len );
-			if (GetLogicalProcessorInformationEx( RelationAll, (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)buffer, &len ))
-			{
-				DWORD offset = 0;
-				char* ptr = buffer;
-				while (ptr < buffer + len)
-				{
-					PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX pi = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)ptr;
-					if (pi->Relationship == RelationProcessorCore)
-					{
-						cores++;
-						for (size_t g = 0; g < pi->Processor.GroupCount; ++g)
-							logical += CountSetBits( pi->Processor.GroupMask[g].Mask );
-					}
-					ptr += pi->Size;
-				}
-			}
-			free( buffer );
-		}
-	}
-}
-
-JobManager* JobManager::GetJobManager()
-{
-	if (!m_JobManager)
-	{
-		uint c, l;
-		GetProcessorCount( c, l );
-		CreateJobManager( l );
-	}
-	return m_JobManager;
-}
-
-// OpenGL helper functions
-void _CheckGL( const char* f, int l )
-{
-	GLenum error = glGetError();
-	if (error != GL_NO_ERROR)
-	{
-		const char* errStr = "UNKNOWN ERROR";
-		if (error == 0x500) errStr = "INVALID ENUM";
-		else if (error == 0x502) errStr = "INVALID OPERATION";
-		else if (error == 0x501) errStr = "INVALID VALUE";
-		else if (error == 0x506) errStr = "INVALID FRAMEBUFFER OPERATION";
-		FatalError( "GL error %d: %s at %s:%d\n", error, errStr, f, l );
-	}
-}
-
-GLuint CreateVBO( const GLfloat* data, const uint size )
-{
-	GLuint id;
-	glGenBuffers( 1, &id );
-	glBindBuffer( GL_ARRAY_BUFFER, id );
-	glBufferData( GL_ARRAY_BUFFER, size, data, GL_STATIC_DRAW );
-	CheckGL();
-	return id;
-}
-
-void BindVBO( const uint idx, const uint N, const GLuint id )
-{
-	glEnableVertexAttribArray( idx );
-	glBindBuffer( GL_ARRAY_BUFFER, id );
-	glVertexAttribPointer( idx, N, GL_FLOAT, GL_FALSE, 0, (void*)0 );
-	CheckGL();
-}
-
-void CheckShader( GLuint shader, const char* vshader, const char* fshader )
-{
-	char buffer[1024];
-	memset( buffer, 0, sizeof( buffer ) );
-	GLsizei length = 0;
-	glGetShaderInfoLog( shader, sizeof( buffer ), &length, buffer );
-	CheckGL();
-	FATALERROR_IF( length > 0 && strstr( buffer, "ERROR" ), "Shader compile error:\n%s", buffer );
-}
-
-void CheckProgram( GLuint id, const char* vshader, const char* fshader )
-{
-	char buffer[1024];
-	memset( buffer, 0, sizeof( buffer ) );
-	GLsizei length = 0;
-	glGetProgramInfoLog( id, sizeof( buffer ), &length, buffer );
-	CheckGL();
-	FATALERROR_IF( length > 0, "Shader link error:\n%s", buffer );
-}
-
-void DrawQuad()
-{
-	static GLuint vao = 0;
-	if (!vao)
-	{
-		// generate buffers
-		static const GLfloat verts[] = { -1, 1, 0, 1, 1, 0, -1, -1, 0, 1, 1, 0, -1, -1, 0, 1, -1, 0 };
-		static const GLfloat uvdata[] = { 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1 };
-		GLuint vertexBuffer = CreateVBO( verts, sizeof( verts ) );
-		GLuint UVBuffer = CreateVBO( uvdata, sizeof( uvdata ) );
-		glGenVertexArrays( 1, &vao );
-		glBindVertexArray( vao );
-		BindVBO( 0, 3, vertexBuffer );
-		BindVBO( 1, 2, UVBuffer );
-		glBindVertexArray( 0 );
-		CheckGL();
-	}
-	glBindVertexArray( vao );
-	glDrawArrays( GL_TRIANGLES, 0, 6 );
-	glBindVertexArray( 0 );
-}
-
-// OpenGL texture wrapper class
-GLTexture::GLTexture( uint w, uint h, uint type )
-{
-	width = w;
-	height = h;
-	glGenTextures( 1, &ID );
-	glBindTexture( GL_TEXTURE_2D, ID );
-	if (type == DEFAULT)
-	{
-		// regular texture
-		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_BGR, GL_UNSIGNED_BYTE, 0 );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-	}
-	else if (type == INTTARGET)
-	{
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, 0 );
-	}
-	else /* type == FLOAT */
-	{
-		// floating point texture
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST );
-		glTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST );
-		glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA32F, width, height, 0, GL_RGBA, GL_FLOAT, 0 );
-	}
-	glBindTexture( GL_TEXTURE_2D, 0 );
-	CheckGL();
-}
-
-GLTexture::~GLTexture()
-{
-	glDeleteTextures( 1, &ID );
-	CheckGL();
-}
-
-void GLTexture::Bind( const uint slot )
-{
-	glActiveTexture( GL_TEXTURE0 + slot );
-	glBindTexture( GL_TEXTURE_2D, ID );
-	CheckGL();
-}
-
-void GLTexture::CopyFrom( Surface* src )
-{
-	glBindTexture( GL_TEXTURE_2D, ID );
-	glTexImage2D( GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, src->pixels );
-	CheckGL();
-}
-
-void GLTexture::CopyTo( Surface* dst )
-{
-	glBindTexture( GL_TEXTURE_2D, ID );
-	glGetTexImage( GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, dst->pixels );
-	CheckGL();
-}
-
-// Shader class implementation
-Shader::Shader( const char* vfile, const char* pfile, bool fromString )
-{
-	if (fromString)
-	{
-		Compile( vfile, pfile );
-	}
-	else
-	{
-		Init( vfile, pfile );
-	}
-}
-
-Shader::~Shader()
-{
-	glDetachShader( ID, pixel );
-	glDetachShader( ID, vertex );
-	glDeleteShader( pixel );
-	glDeleteShader( vertex );
-	glDeleteProgram( ID );
-	CheckGL();
-}
-
-void Shader::Init( const char* vfile, const char* pfile )
-{
-	string vsText = TextFileRead( vfile );
-	string fsText = TextFileRead( pfile );
-	FATALERROR_IF( vsText.size() == 0, "File %s not found", vfile );
-	FATALERROR_IF( fsText.size() == 0, "File %s not found", pfile );
-	const char* vertexText = vsText.c_str();
-	const char* fragmentText = fsText.c_str();
-	Compile( vertexText, fragmentText );
-}
-
-void Shader::Compile( const char* vtext, const char* ftext )
-{
-	vertex = glCreateShader( GL_VERTEX_SHADER );
-	pixel = glCreateShader( GL_FRAGMENT_SHADER );
-	glShaderSource( vertex, 1, &vtext, 0 );
-	glCompileShader( vertex );
-	CheckShader( vertex, vtext, ftext );
-	glShaderSource( pixel, 1, &ftext, 0 );
-	glCompileShader( pixel );
-	CheckShader( pixel, vtext, ftext );
-	ID = glCreateProgram();
-	glAttachShader( ID, vertex );
-	glAttachShader( ID, pixel );
-	glBindAttribLocation( ID, 0, "pos" );
-	glBindAttribLocation( ID, 1, "tuv" );
-	glLinkProgram( ID );
-	CheckProgram( ID, vtext, ftext );
-	CheckGL();
-}
-
-void Shader::Bind()
-{
-	glUseProgram( ID );
-	CheckGL();
-}
-
-void Shader::Unbind()
-{
-	glUseProgram( 0 );
-	CheckGL();
-}
-
-void Shader::SetInputTexture( uint slot, const char* name, GLTexture* texture )
-{
-	glActiveTexture( GL_TEXTURE0 + slot );
-	glBindTexture( GL_TEXTURE_2D, texture->ID );
-	glUniform1i( glGetUniformLocation( ID, name ), slot );
-	CheckGL();
-}
-
-void Shader::SetInputMatrix( const char* name, const mat4& matrix )
-{
-	const GLfloat* data = (const GLfloat*)&matrix;
-	glUniformMatrix4fv( glGetUniformLocation( ID, name ), 1, GL_FALSE, data );
-	CheckGL();
-}
-
-void Shader::SetFloat( const char* name, const float v )
-{
-	glUniform1f( glGetUniformLocation( ID, name ), v );
-	CheckGL();
-}
-
-void Shader::SetInt( const char* name, const int v )
-{
-	glUniform1i( glGetUniformLocation( ID, name ), v );
-	CheckGL();
-}
-
-void Shader::SetUInt( const char* name, const uint v )
-{
-	glUniform1ui( glGetUniformLocation( ID, name ), v );
-	CheckGL();
-}
+//// Jobmanager implementation
+//DWORD JobThreadProc( LPVOID lpParameter )
+//{
+//	JobThread* JobThreadInstance = (JobThread*)lpParameter;
+//	JobThreadInstance->BackgroundTask();
+//	return 0;
+//}
+//
+//void JobThread::CreateAndStartThread( unsigned int threadId )
+//{
+//	m_GoSignal = CreateEvent( 0, FALSE, FALSE, 0 );
+//	m_ThreadHandle = CreateThread( 0, 0, (LPTHREAD_START_ROUTINE)&JobThreadProc, (LPVOID)this, 0, 0 );
+//	m_ThreadID = threadId;
+//}
+//void JobThread::BackgroundTask()
+//{
+//	while (1)
+//	{
+//		WaitForSingleObject( m_GoSignal, INFINITE );
+//		while (1)
+//		{
+//			Job* job = JobManager::GetJobManager()->GetNextJob();
+//			if (!job)
+//			{
+//				JobManager::GetJobManager()->ThreadDone( m_ThreadID );
+//				break;
+//			}
+//			job->RunCodeWrapper();
+//		}
+//	}
+//}
+//
+//void JobThread::Go()
+//{
+//	SetEvent( m_GoSignal );
+//}
+//
+//void Job::RunCodeWrapper()
+//{
+//	Main();
+//}
+//
+//JobManager* JobManager::m_JobManager = 0;
+//
+//JobManager::JobManager( unsigned int threads ) : m_NumThreads( threads )
+//{
+//	InitializeCriticalSection( &m_CS );
+//}
+//
+//JobManager::~JobManager()
+//{
+//	DeleteCriticalSection( &m_CS );
+//}
+//
+//void JobManager::CreateJobManager( unsigned int numThreads )
+//{
+//	m_JobManager = new JobManager( numThreads );
+//	m_JobManager->m_JobThreadList = new JobThread[numThreads];
+//	for (unsigned int i = 0; i < numThreads; i++)
+//	{
+//		m_JobManager->m_JobThreadList[i].CreateAndStartThread( i );
+//		m_JobManager->m_ThreadDone[i] = CreateEvent( 0, FALSE, FALSE, 0 );
+//	}
+//	m_JobManager->m_JobCount = 0;
+//}
+//
+//void JobManager::AddJob2( Job* a_Job )
+//{
+//	m_JobList[m_JobCount++] = a_Job;
+//}
+//
+//Job* JobManager::GetNextJob()
+//{
+//	Job* job = 0;
+//	EnterCriticalSection( &m_CS );
+//	if (m_JobCount > 0) job = m_JobList[--m_JobCount];
+//	LeaveCriticalSection( &m_CS );
+//	return job;
+//}
+//
+//void JobManager::RunJobs()
+//{
+//	if (m_JobCount == 0) return;
+//	for (unsigned int i = 0; i < m_NumThreads; i++) m_JobThreadList[i].Go();
+//	WaitForMultipleObjects( m_NumThreads, m_ThreadDone, TRUE, INFINITE );
+//}
+//
+//void JobManager::ThreadDone( unsigned int n )
+//{
+//	SetEvent( m_ThreadDone[n] );
+//}
+//
+//DWORD CountSetBits( ULONG_PTR bitMask )
+//{
+//	DWORD LSHIFT = sizeof( ULONG_PTR ) * 8 - 1, bitSetCount = 0;
+//	ULONG_PTR bitTest = (ULONG_PTR)1 << LSHIFT;
+//	for (DWORD i = 0; i <= LSHIFT; ++i) bitSetCount += ((bitMask & bitTest) ? 1 : 0), bitTest /= 2;
+//	return bitSetCount;
+//}
+//
+//void JobManager::GetProcessorCount( uint& cores, uint& logical )
+//{
+//	// https://github.com/GPUOpen-LibrariesAndSDKs/cpu-core-counts
+//	cores = logical = 0;
+//	char* buffer = NULL;
+//	DWORD len = 0;
+//	if (FALSE == GetLogicalProcessorInformationEx( RelationAll, (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)buffer, &len ))
+//	{
+//		if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+//		{
+//			buffer = (char*)malloc( len );
+//			if (GetLogicalProcessorInformationEx( RelationAll, (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)buffer, &len ))
+//			{
+//				DWORD offset = 0;
+//				char* ptr = buffer;
+//				while (ptr < buffer + len)
+//				{
+//					PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX pi = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)ptr;
+//					if (pi->Relationship == RelationProcessorCore)
+//					{
+//						cores++;
+//						for (size_t g = 0; g < pi->Processor.GroupCount; ++g)
+//							logical += CountSetBits( pi->Processor.GroupMask[g].Mask );
+//					}
+//					ptr += pi->Size;
+//				}
+//			}
+//			free( buffer );
+//		}
+//	}
+//}
+//
+//JobManager* JobManager::GetJobManager()
+//{
+//	if (!m_JobManager)
+//	{
+//		uint c, l;
+//		GetProcessorCount( c, l );
+//		CreateJobManager( l );
+//	}
+//	return m_JobManager;
+//}
 
 // RNG - Marsaglia's xor32
 static uint seed = 0x12345678;
@@ -737,89 +561,6 @@ float noise2D( const float x, const float y )
 	return total / frequency;
 }
 
-// math implementations
-float4::float4( const float3& a, const float d )
-{
-	x = a.x, y = a.y, z = a.z;
-	w = d;
-}
-float4::float4( const float3& a )
-{
-	x = a.x, y = a.y, z = a.z;
-	w = 0;
-}
-int4::int4( const int3& a, const int d )
-{
-	x = a.x, y = a.y, z = a.z;
-	w = d;
-}
-uint4::uint4( const uint3& a, const uint d )
-{
-	x = a.x, y = a.y, z = a.z;
-	w = d;
-}
-mat4 operator*( const mat4& a, const mat4& b )
-{
-	mat4 r;
-	for (uint i = 0; i < 16; i += 4)
-		for (uint j = 0; j < 4; ++j)
-		{
-			r[i + j] =
-				(a.cell[i + 0] * b.cell[j + 0]) +
-				(a.cell[i + 1] * b.cell[j + 4]) +
-				(a.cell[i + 2] * b.cell[j + 8]) +
-				(a.cell[i + 3] * b.cell[j + 12]);
-		}
-	return r;
-}
-mat4 operator*( const mat4& a, const float s )
-{
-	mat4 r;
-	for (uint i = 0; i < 16; i += 4) r.cell[i] = a.cell[i] * s;
-	return r;
-}
-mat4 operator*( const float s, const mat4& a )
-{
-	mat4 r;
-	for (uint i = 0; i < 16; i++) r.cell[i] = a.cell[i] * s;
-	return r;
-}
-mat4 operator+( const mat4& a, const mat4& b )
-{
-	mat4 r;
-	for (uint i = 0; i < 16; i += 4) r.cell[i] = a.cell[i] + b.cell[i];
-	return r;
-}
-bool operator==( const mat4& a, const mat4& b )
-{
-	for (uint i = 0; i < 16; i++)
-		if (a.cell[i] != b.cell[i]) return false;
-	return true;
-}
-bool operator!=( const mat4& a, const mat4& b ) { return !(a == b); }
-float4 operator*( const mat4& a, const float4& b )
-{
-	return make_float4( a.cell[0] * b.x + a.cell[1] * b.y + a.cell[2] * b.z + a.cell[3] * b.w,
-		a.cell[4] * b.x + a.cell[5] * b.y + a.cell[6] * b.z + a.cell[7] * b.w,
-		a.cell[8] * b.x + a.cell[9] * b.y + a.cell[10] * b.z + a.cell[11] * b.w,
-		a.cell[12] * b.x + a.cell[13] * b.y + a.cell[14] * b.z + a.cell[15] * b.w );
-}
-float4 operator*( const float4& b, const mat4& a )
-{
-	return make_float4( a.cell[0] * b.x + a.cell[1] * b.y + a.cell[2] * b.z + a.cell[3] * b.w,
-		a.cell[4] * b.x + a.cell[5] * b.y + a.cell[6] * b.z + a.cell[7] * b.w,
-		a.cell[8] * b.x + a.cell[9] * b.y + a.cell[10] * b.z + a.cell[11] * b.w,
-		a.cell[12] * b.x + a.cell[13] * b.y + a.cell[14] * b.z + a.cell[15] * b.w );
-}
-float3 TransformPosition( const float3& a, const mat4& M )
-{
-	return make_float3( make_float4( a, 1 ) * M );
-}
-float3 TransformVector( const float3& a, const mat4& M )
-{
-	return make_float3( make_float4( a, 0 ) * M );
-}
-
 // Helper functions
 bool FileIsNewer( const char* file1, const char* file2 )
 {
@@ -842,7 +583,7 @@ bool FileIsNewer( const char* file1, const char* file2 )
 
 bool FileExists( const char* f )
 {
-	ifstream s( f );
+	std::ifstream s( f );
 	return s.good();
 }
 
@@ -852,21 +593,21 @@ bool RemoveFile( const char* f )
 	return !remove( f );
 }
 
-uint FileSize( string filename )
+uint FileSize( const std::string& filename )
 {
-	ifstream s( filename );
+	std::ifstream s( filename );
 	return s.good();
 }
 
-string TextFileRead( const char* _File )
+std::string TextFileRead( const char* _File )
 {
-	ifstream s( _File );
-	string str( (istreambuf_iterator<char>( s )), istreambuf_iterator<char>() );
+	std::ifstream s( _File );
+	std::string str( (std::istreambuf_iterator<char>( s )), std::istreambuf_iterator<char>() );
 	s.close();
 	return str;
 }
 
-int LineCount( const string s )
+int LineCount( const std::string& s )
 {
 	const char* p = s.c_str();
 	int lines = 0;
@@ -874,9 +615,9 @@ int LineCount( const string s )
 	return lines;
 }
 
-void TextFileWrite( const string& text, const char* _File )
+void TextFileWrite( const std::string& text, const char* _File )
 {
-	ofstream s( _File, ios::binary );
+	std::ofstream s( _File, std::ios::binary );
 	int len = (int)text.size();
 	s.write( (const char*)&len, sizeof( len ) );
 	s.write( text.c_str(), len );
@@ -1857,6 +1598,67 @@ void Sprite::InitializeStartData()
 			}
 		}
 	}
+}
+
+CPUCaps::CPUCaps()
+{
+#ifdef _WIN32
+#define cpuid(info, x) __cpuidex(info, x, 0)
+#else
+#include <cpuid.h>
+	void cpuid(int info[4], int InfoType) { __cpuid_count(InfoType, 0, info[0], info[1], info[2], info[3]); }
+#endif
+
+	int info[4];
+	cpuid(info, 0);
+	int nIds = info[0];
+	cpuid(info, 0x80000000);
+	unsigned nExIds = info[0];
+	// detect Features
+	if (nIds >= 0x00000001)
+	{
+		cpuid(info, 0x00000001);
+		HW_MMX = (info[3] & ((int)1 << 23)) != 0;
+		HW_SSE = (info[3] & ((int)1 << 25)) != 0;
+		HW_SSE2 = (info[3] & ((int)1 << 26)) != 0;
+		HW_SSE3 = (info[2] & ((int)1 << 0)) != 0;
+		HW_SSSE3 = (info[2] & ((int)1 << 9)) != 0;
+		HW_SSE41 = (info[2] & ((int)1 << 19)) != 0;
+		HW_SSE42 = (info[2] & ((int)1 << 20)) != 0;
+		HW_AES = (info[2] & ((int)1 << 25)) != 0;
+		HW_AVX = (info[2] & ((int)1 << 28)) != 0;
+		HW_FMA3 = (info[2] & ((int)1 << 12)) != 0;
+		HW_RDRAND = (info[2] & ((int)1 << 30)) != 0;
+	}
+	if (nIds >= 0x00000007)
+	{
+		cpuid(info, 0x00000007);
+		HW_AVX2 = (info[1] & ((int)1 << 5)) != 0;
+		HW_BMI1 = (info[1] & ((int)1 << 3)) != 0;
+		HW_BMI2 = (info[1] & ((int)1 << 8)) != 0;
+		HW_ADX = (info[1] & ((int)1 << 19)) != 0;
+		HW_SHA = (info[1] & ((int)1 << 29)) != 0;
+		HW_PREFETCHWT1 = (info[2] & ((int)1 << 0)) != 0;
+		HW_AVX512F = (info[1] & ((int)1 << 16)) != 0;
+		HW_AVX512CD = (info[1] & ((int)1 << 28)) != 0;
+		HW_AVX512PF = (info[1] & ((int)1 << 26)) != 0;
+		HW_AVX512ER = (info[1] & ((int)1 << 27)) != 0;
+		HW_AVX512VL = (info[1] & ((int)1 << 31)) != 0;
+		HW_AVX512BW = (info[1] & ((int)1 << 30)) != 0;
+		HW_AVX512DQ = (info[1] & ((int)1 << 17)) != 0;
+		HW_AVX512IFMA = (info[1] & ((int)1 << 21)) != 0;
+		HW_AVX512VBMI = (info[2] & ((int)1 << 1)) != 0;
+	}
+	if (nExIds >= 0x80000001)
+	{
+		cpuid(info, 0x80000001);
+		HW_x64 = (info[3] & ((int)1 << 29)) != 0;
+		HW_ABM = (info[2] & ((int)1 << 5)) != 0;
+		HW_SSE4a = (info[2] & ((int)1 << 6)) != 0;
+		HW_FMA4 = (info[2] & ((int)1 << 16)) != 0;
+		HW_XOP = (info[2] & ((int)1 << 11)) != 0;
+	}
+#undef cpuid
 }
 
 /*
