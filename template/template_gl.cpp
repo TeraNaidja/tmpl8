@@ -89,9 +89,13 @@ Shader::Shader(const char* vfile, const char* pfile, bool fromString)
 Shader::~Shader()
 {
 	glDetachShader(ID, pixel);
+	CheckGL();
 	glDetachShader(ID, vertex);
+	CheckGL();
 	glDeleteShader(pixel);
+	CheckGL();
 	glDeleteShader(vertex);
+	CheckGL();
 	glDeleteProgram(ID);
 	CheckGL();
 }

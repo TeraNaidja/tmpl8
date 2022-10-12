@@ -80,7 +80,7 @@ namespace Tmpl8::Detail
 	static void* GLFWWindow = nullptr;
 
 	const char* VertexShaderSource = R"shader(
-"#version 330
+#version 330
 in vec4 p;
 in vec2 t;
 out vec2 u;
@@ -215,24 +215,24 @@ void main()
 	// done, enter main loop
 
 	// basic shader: apply gamma correction
-	Shader shader = Shader(Detail::VertexShaderSource, Detail::FragmentShaderSource, true );
+	std::unique_ptr<Shader> shader = std::make_unique<Shader>(Detail::VertexShaderSource, Detail::FragmentShaderSource, true );
 
 	float deltaTime = 0;
 	static int frameNr = 0;
 	static Timer timer;
 	while (!glfwWindowShouldClose( window ))
 	{
-		deltaTime = std::min( 500.0f, 1000.0f * timer.elapsed() );
+		deltaTime = std::min( 0.5f, timer.elapsed() );
 		timer.reset();
 		app->Tick( deltaTime );
 		// send the rendering result to the screen using OpenGL
 		if (frameNr++ > 1)
 		{
 			if (app->screen) renderTarget->CopyFrom( app->screen );
-			shader.Bind();
-			shader.SetInputTexture( 0, "c", renderTarget );
+			shader->Bind();
+			shader->SetInputTexture( 0, "c", renderTarget );
 			DrawQuad();
-			shader.Unbind();
+			shader->Unbind();
 			glfwSwapBuffers( window );
 			glfwPollEvents();
 		}
@@ -240,6 +240,9 @@ void main()
 	}
 	// close down
 	app->Shutdown();
+	shader.reset();
+	delete app;
+
 	glfwDestroyWindow( window );
 	glfwTerminate();
 }
@@ -391,7 +394,12 @@ void FatalError( const char* fmt, ... )
 #else
 	fprintf( stderr, t );
 #endif
-	while (1) exit( 0 );
+	while (1)
+	{
+		__debugbreak();
+
+		exit(0);
+	}
 }
 
 /*

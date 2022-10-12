@@ -50,4 +50,7 @@ using ushort = uint16_t;
 #include "template_math.h"
 #include "template.h"
 
+#include "surface.h"
+#include "sprite.h"
+
 // EOF

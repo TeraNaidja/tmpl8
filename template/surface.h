@@ -22,6 +22,7 @@ namespace Tmpl8
 		void Plot(int x, int y, uint c);
 		void LoadImage(const char* file);
 		void CopyTo(Surface* dst, int x, int y);
+		void SubCopyTo(Surface* target, int targetX, int targetY, int sourceX, int sourceY, int sizeX, int sizeY, uint colorMask = 0xFFFFFFFF) const;
 		void Box(int x1, int y1, int x2, int y2, uint color);
 		void Bar(int x1, int y1, int x2, int y2, uint color);
 		// attributes

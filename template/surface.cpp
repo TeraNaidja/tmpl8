@@ -181,6 +181,62 @@ void Tmpl8::Surface::CopyTo(Surface* d, int x, int y)
 	}
 }
 
+void Tmpl8::Surface::SubCopyTo(Surface* target, int targetX, int targetY, int sourceX, int sourceY, int sizeX, int sizeY, uint colorMask) const
+{
+	uint* dst = target->pixels;
+	uint* src = pixels + (sourceX + (sourceY * width));
+	if ((src) && (dst))
+	{
+		int srcwidth = width;
+		int srcheight = height;
+		int dstwidth = target->width;
+		int dstheight = target->height;
+		if ((sizeX + targetX) > dstwidth)
+		{
+			sizeX = dstwidth - targetX;
+		}
+		if ((sizeY + targetY) > dstheight)
+		{
+			sizeY = dstheight - targetY;
+		}
+		if (targetX < 0)
+		{
+			src -= targetX;
+			//srcwidth += targetX;
+			sizeX += targetX;
+			targetX = 0;
+		}
+		if (targetY < 0)
+		{
+			src -= targetY * srcwidth;
+			//srcheight += targetY;
+			sizeY += targetY;
+			targetY = 0;
+		}
+		if ((srcwidth > 0) && (srcheight > 0))
+		{
+			dst += targetX + dstwidth * targetY;
+			for (int y = 0; y < sizeY; y++)
+			{
+				for (int x = 0; x < sizeX; ++x)
+				{
+					uint color = *(src + x);
+					if (color == 0x54FC54) //Shadow
+					{
+						*(dst + x) = 0;
+					}
+					else if (color != 0)
+					{
+						*(dst + x) = color & colorMask;
+					}
+				}
+				dst += dstwidth;
+				src += srcwidth;
+			}
+		}
+	}
+}
+
 void Tmpl8::Surface::SetChar(int c, const char* c1, const char* c2, const char* c3, const char* c4, const char* c5)
 {
 	strcpy(s_Font[c][0], c1);

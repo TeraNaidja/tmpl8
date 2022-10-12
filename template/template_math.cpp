@@ -172,7 +172,7 @@ float3 mat4::TransformPoint(const float3& v) const
 	return res * (1.f / w);
 }
 
-mat4 Tmpl8::operator*(const mat4& a, const mat4& b)
+mat4 operator*(const mat4& a, const mat4& b)
 {
 	mat4 r;
 	for (uint i = 0; i < 16; i += 4)
@@ -187,52 +187,52 @@ mat4 Tmpl8::operator*(const mat4& a, const mat4& b)
 	return r;
 }
 
-mat4 Tmpl8::operator*(const mat4& a, const float s)
+mat4 operator*(const mat4& a, const float s)
 {
 	mat4 r;
 	for (uint i = 0; i < 16; i += 4) r.cell[i] = a.cell[i] * s;
 	return r;
 }
 
-mat4 Tmpl8::operator*(const float s, const mat4& a)
+mat4 operator*(const float s, const mat4& a)
 {
 	mat4 r;
 	for (uint i = 0; i < 16; i++) r.cell[i] = a.cell[i] * s;
 	return r;
 }
 
-mat4 Tmpl8::operator+(const mat4& a, const mat4& b)
+mat4 operator+(const mat4& a, const mat4& b)
 {
 	mat4 r;
 	for (uint i = 0; i < 16; i += 4) r.cell[i] = a.cell[i] + b.cell[i];
 	return r;
 }
-bool Tmpl8::operator==(const mat4& a, const mat4& b)
+bool operator==(const mat4& a, const mat4& b)
 {
 	for (uint i = 0; i < 16; i++)
 		if (a.cell[i] != b.cell[i]) return false;
 	return true;
 }
-bool Tmpl8::operator!=(const mat4& a, const mat4& b) { return !(a == b); }
-float4 Tmpl8::operator*(const mat4& a, const float4& b)
+bool operator!=(const mat4& a, const mat4& b) { return !(a == b); }
+float4 operator*(const mat4& a, const float4& b)
 {
 	return float4(a.cell[0] * b.x + a.cell[1] * b.y + a.cell[2] * b.z + a.cell[3] * b.w,
 		a.cell[4] * b.x + a.cell[5] * b.y + a.cell[6] * b.z + a.cell[7] * b.w,
 		a.cell[8] * b.x + a.cell[9] * b.y + a.cell[10] * b.z + a.cell[11] * b.w,
 		a.cell[12] * b.x + a.cell[13] * b.y + a.cell[14] * b.z + a.cell[15] * b.w);
 }
-float4 Tmpl8::operator*(const float4& a, const mat4& b)
+float4 operator*(const float4& a, const mat4& b)
 {
 	return float4(b.cell[0] * a.x + b.cell[1] * a.y + b.cell[2] * a.z + b.cell[3] * a.w,
 		b.cell[4] * a.x + b.cell[5] * a.y + b.cell[6] * a.z + b.cell[7] * a.w,
 		b.cell[8] * a.x + b.cell[9] * a.y + b.cell[10] * a.z + b.cell[11] * a.w,
 		b.cell[12] * a.x + b.cell[13] * a.y + b.cell[14] * a.z + b.cell[15] * a.w);
 }
-float3 Tmpl8::TransformPosition(const float3& a, const mat4& M)
+float3 TransformPosition(const float3& a, const mat4& M)
 {
 	return (float4(a, 1) * M).xyz;
 }
-float3 Tmpl8::TransformVector(const float3& a, const mat4& M)
+float3 TransformVector(const float3& a, const mat4& M)
 {
 	return (float4(a, 0) * M).xyz;
 }
