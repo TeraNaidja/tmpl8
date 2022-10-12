@@ -4,9 +4,10 @@
 #include "precomp.h"
 #include "template.h"
 
-#include "template_gl.h"
-#include "template_cl.h"
+#include <glad.h>
+#include <GLFW/glfw3.h>
 
+#include "template_gl.h"
 #include "game.h"
 
 //// windows.h: disable as much as possible to speed up compilation.
@@ -67,6 +68,8 @@
 #define STBI_NO_PSD
 #define STBI_NO_PIC
 #define STBI_NO_PNM
+#include "surface.h"
+#include "timer.h"
 #include "lib/stb_image.h"
 
 #pragma comment( linker, "/subsystem:windows /ENTRY:mainCRTStartup" )
@@ -75,6 +78,26 @@
 namespace Tmpl8::Detail
 {
 	static void* GLFWWindow = nullptr;
+
+	const char* VertexShaderSource = R"shader(
+"#version 330
+in vec4 p;
+in vec2 t;
+out vec2 u;
+void main()
+{
+	u=t;gl_Position=p;
+})shader";
+	const char* FragmentShaderSource = R"shader(
+#version 330
+uniform sampler2D c;
+in vec2 u;
+out vec4 f;
+void main()
+{
+	f=/*sqrt*/(texture(c,u));
+}
+)shader";
 };
 
 using namespace Tmpl8;
@@ -95,9 +118,6 @@ static bool hasFocus = true, running = true;
 static GLTexture* renderTarget = 0;
 static int scrwidth = 0, scrheight = 0;
 static TheApp* app = 0;
-
-// static member data for instruction set support class
-static const CPUCaps cpucaps;
 
 // provide access to the render target, for OpenCL / OpenGL interop
 GLTexture* GetRenderTarget() { return renderTarget; }
@@ -193,131 +213,10 @@ void main()
 	app->screen = screen;
 	app->Init();
 	// done, enter main loop
-#if 1
+
 	// basic shader: apply gamma correction
-	Shader* shader = new Shader(
-		"#version 330\nin vec4 p;\nin vec2 t;out vec2 u;void main(){u=t;gl_Position=p;}",
-		"#version 330\nuniform sampler2D c;in vec2 u;out vec4 f;void main(){f=/*sqrt*/(texture(c,u));}", true );
-#else
-	// fxaa shader
-	Shader* shader = new Shader(
-		"#version 330\nin vec4 p;\nin vec2 t;out vec2 uv;void main(){uv=t;gl_Position=p;}",
-		// FXAA 3.11 Implementation - effendiian
-		// https://www.shadertoy.com/view/ttXGzn
-		"#version 330\nuniform sampler2D tex;\nin vec2 uv;out vec4 f; \n"							\
-		"#define FXAA_LUMINANCE 			1					\n"									\
-		"#define FXAA_EDGE_THRESHOLD	  	(1.0/8.0)			\n"									\
-		"#define FXAA_EDGE_THRESHOLD_MIN  	(1.0/24.0)			\n"									\
-		"#define FXAA_SEARCH_STEPS			32					\n"									\
-		"#define FXAA_SEARCH_ACCELERATION 	1					\n"									\
-		"#define FXAA_SEARCH_THRESHOLD		(1.0/4.0)			\n"									\
-		"#define FXAA_SUBPIX				2 // 1 is crisper	\n"									\
-		"#define FXAA_SUBPIX_CAP			(3.0/4.0)			\n"									\
-		"#define FXAA_SUBPIX_TRIM			(1.0/4.0)			\n"									\
-		"#define FXAA_SUBPIX_TRIM_SCALE (1.0/(1.0 - FXAA_SUBPIX_TRIM))	\n"							\
-		"float lum( vec3 color ) {\n #if FXAA_LUMINANCE == 0 \n"									\
-		"	return color.x * 0.2126729 + color.y * 0.7151522 + color.z * 0.0721750; \n"				\
-		"#else \n return color.g * (0.587 / 0.299) + color.r; \n #endif \n }"						\
-		"float vertEdge( float lumaO, float lumaN, float lumaE, float lumaS,"						\
-		"	float lumaW, float lumaNW, float lumaNE, float lumaSW, float lumaSE )"					\
-		"{	float top = (0.25 * lumaNW) + (-0.5 * lumaN) + (0.25 * lumaNE);"						\
-		"	float middle = (0.50 * lumaW) + (-1.0 * lumaO) + (0.50 * lumaE);"						\
-		"	float bottom = (0.25 * lumaSW) + (-0.5 * lumaS) + (0.25 * lumaSE);"						\
-		"	return abs( top ) + abs( middle ) + abs( bottom ); }"									\
-		"float horEdge( float lumaO, float lumaN, float lumaE, float lumaS,"						\
-		"	float lumaW, float lumaNW, float lumaNE, float lumaSW, float lumaSE )"					\
-		"{	float top = (0.25 * lumaNW) + (-0.5 * lumaW) + (0.25 * lumaSW);"						\
-		"	float middle = (0.50 * lumaN) + (-1.0 * lumaO) + (0.50 * lumaS);"						\
-		"	float bottom = (0.25 * lumaNE) + (-0.5 * lumaE) + (0.25 * lumaSE);"						\
-		"	return abs( top ) + abs( middle ) + abs( bottom ); }"									\
-		"vec3 fxaa( vec2 textureDimensions, vec2 uv )"												\
-		"{	vec2 texel = vec2( 1.0, 1.0 ) / textureDimensions;"										\
-		"	vec3 rgbN = texture( tex, uv + vec2( 0, -texel.y ) ).rgb,"								\
-		"		 rgbW = texture( tex, uv + vec2( -texel.x, 0 ) ).rgb,"								\
-		"		 rgbO = texture( tex, uv + vec2( 0, 0 ) ).rgb,"										\
-		"		 rgbE = texture( tex, uv + vec2( texel.x, 0 ) ).rgb,"								\
-		"		 rgbS = texture( tex, uv + vec2( 0, texel.y ) ).rgb;"								\
-		"	float lumaN = lum( rgbN ), lumaW = lum( rgbW );"										\
-		"	float lumaO = lum( rgbO ), lumaE = lum( rgbE ), lumaS = lum( rgbS );"					\
-		"	float minLuma = min( lumaO, min( min( lumaN, lumaW ), min( lumaS, lumaE ) ) );"			\
-		"	float maxLuma = max( lumaO, max( max( lumaN, lumaW ), max( lumaS, lumaE ) ) );"			\
-		"	float localContrast = maxLuma - minLuma;"												\
-		"	if (localContrast < max( FXAA_EDGE_THRESHOLD_MIN, maxLuma* FXAA_EDGE_THRESHOLD ))"		\
-		"		return rgbO;"																		\
-		"	vec3 rgbL = rgbN + rgbW + rgbO + rgbE + rgbS;"											\
-		"	float lumaL = (lumaN + lumaW + lumaS + lumaE) * 0.25;"									\
-		"	float pixelContrast = abs( lumaL - lumaO );"											\
-		"	float contrastRatio = pixelContrast / localContrast;"									\
-		"	float lowpassBlend = 0;			\n"														\
-		"#if FXAA_SUBPIX == 1				\n"														\
-		"	lowpassBlend = max( 0.0, contrastRatio - FXAA_SUBPIX_TRIM ) * FXAA_SUBPIX_TRIM_SCALE;"	\
-		"	lowpassBlend = min( FXAA_SUBPIX_CAP, lowpassBlend );	\n"								\
-		"#elif FXAA_SUBPIX == 2				\n"														\
-		"	lowpassBlend = contrastRatio;	\n"														\
-		"#endif								\n"														\
-		"	vec3 rgbNW = texture( tex, uv + vec2( -texel.x, -texel.y ) ).rgb,"						\
-		"		 rgbNE = texture( tex, uv + vec2( texel.x, -texel.y ) ).rgb,"						\
-		"		 rgbSW = texture( tex, uv + vec2( -texel.x, texel.y ) ).rgb,"						\
-		"		 rgbSE = texture( tex, uv + vec2( texel.x, texel.y ) ).rgb;"						\
-		"	rgbL += (rgbNW + rgbNE + rgbSW + rgbSE);"												\
-		"	rgbL *= (1.0 / 9.0);"																	\
-		"	float lumaNW = lum( rgbNW ), lumaNE = lum( rgbNE );"									\
-		"	float lumaSW = lum( rgbSW ), lumaSE = lum( rgbSE );"									\
-		"	float edgeVert = vertEdge( lumaO, lumaN, lumaE, lumaS, lumaW, lumaNW, lumaNE, lumaSW, lumaSE );" \
-		"	float edgeHori = horEdge( lumaO, lumaN, lumaE, lumaS, lumaW, lumaNW, lumaNE, lumaSW, lumaSE );" \
-		"	bool isHorizontal = edgeHori >= edgeVert;"												\
-		"	float edgeSign = isHorizontal ? -texel.y : -texel.x;"									\
-		"	float gradNeg = isHorizontal ? abs( lumaN - lumaO ) : abs( lumaW - lumaO );"			\
-		"	float gradPos = isHorizontal ? abs( lumaS - lumaO ) : abs( lumaE - lumaO );"			\
-		"	float lumaNeg = isHorizontal ? ((lumaN + lumaO) * 0.5) : ((lumaW + lumaO) * 0.5);"		\
-		"	float lumaPos = isHorizontal ? ((lumaS + lumaO) * 0.5) : ((lumaE + lumaO) * 0.5);"		\
-		"	bool isNegative = (gradNeg >= gradPos);"												\
-		"	float gradientHighest = isNegative ? gradNeg : gradPos;"								\
-		"	float lumaHighest = isNegative ? lumaNeg : lumaPos;"									\
-		"	if (isNegative) edgeSign *= -1.0;"														\
-		"	vec2 pointN = vec2( 0.0, 0.0 );"														\
-		"	pointN.x = uv.x + (isHorizontal ? 0.0 : edgeSign * 0.5);"								\
-		"	pointN.y = uv.y + (isHorizontal ? edgeSign * 0.5 : 0.0);"								\
-		"	gradientHighest *= FXAA_SEARCH_THRESHOLD;"												\
-		"	vec2 pointP = pointN;"																	\
-		"	vec2 offset = isHorizontal ? vec2( texel.x, 0.0 ) : vec2( 0.0, texel.y );"				\
-		"	float lumaNegEnd = lumaNeg, lumaPosEnd = lumaPos;"										\
-		"	bool searchNeg = false, searchPos = false;\n"											\
-		"#if FXAA_SEARCH_ACCELERATION == 1\n"														\
-		"	pointN -= offset, pointP += offset;\n"													\
-		"#elif FXAA_SEARCH_ACCELERATION == 2\n"														\
-		"	pointN -= offset * 1.5, pointP += offset * 1.5, offset *= 2;\n"							\
-		"#elif FXAA_SEARCH_ACCELERATION == 3\n"														\
-		"	pointN -= offset * 2, pointP += offset * 2, offset *= 3;\n"								\
-		"#elif FXAA_SEARCH_ACCELERATION == 4\n"														\
-		"	pointN -= offset * 2.5, pointP += offset * 2.5, offset *= 4;\n"							\
-		"#endif\n"																					\
-		"	for (int i = 0; i < FXAA_SEARCH_STEPS; i++) {\n"										\
-		"	#if FXAA_SEARCH_ACCELERATION == 1\n"													\
-		"		if (!searchNeg) lumaNegEnd = lum( texture( tex, pointN ).rgb );"					\
-		"		if (!searchPos) lumaPosEnd = lum( texture( tex, pointP ).rgb );\n"					\
-		"	#else \n"																				\
-		"		if (!searchNeg) lumaNegEnd = lum( textureGrad( tex, pointN, offset, offset ).rgb );"	\
-		"		if (!searchPos) lumaPosEnd = lum( textureGrad( tex, pointP, offset, offset ).rgb );\n"	\
-		"	#endif \n"																				\
-		"		searchNeg = searchNeg || (abs( lumaNegEnd - lumaHighest ) >= gradientHighest);"		\
-		"		searchPos = searchPos || (abs( lumaPosEnd - lumaPos ) >= gradPos);"					\
-		"		if (searchNeg && searchPos) break;"													\
-		"		if (!searchNeg) pointN -= offset;"													\
-		"		if (!searchPos) pointP += offset; }"												\
-		"	float distanceNeg = isHorizontal ? uv.x - pointN.x : uv.y - pointN.y;"					\
-		"	float distancePos = isHorizontal ? pointP.x - uv.x : pointP.y - uv.y;"					\
-		"	bool isCloserToNegative = distanceNeg < distancePos;"									\
-		"	float lumaEnd = isCloserToNegative ? lumaNegEnd : lumaPosEnd;"							\
-		"	if (((lumaO - lumaNeg) < 0.0) == ((lumaEnd - lumaNeg) < 0.0)) edgeSign = 0.0;"			\
-		"	float spanLen = distancePos + distanceNeg;"												\
-		"	float dist = isCloserToNegative ? distanceNeg : distancePos;"							\
-		"	float subOffs = (0.5 + (dist * (-1.0 / spanLen))) * edgeSign;"							\
-		"	vec3 rgbOffset = textureLod( tex, vec2( uv.x + (isHorizontal ? 0.0 :"					\
-		"		subOffs), uv.y + (isHorizontal ? subOffs : 0.0) ), 0.0 ).rgb;"						\
-		"	return mix( rgbOffset, rgbL, lowpassBlend ); }"											\
-		"void main(){f=vec4(sqrt(fxaa(vec2(1240,800),uv)),1);}", true );
-#endif
+	Shader shader = Shader(Detail::VertexShaderSource, Detail::FragmentShaderSource, true );
+
 	float deltaTime = 0;
 	static int frameNr = 0;
 	static Timer timer;
@@ -330,10 +229,10 @@ void main()
 		if (frameNr++ > 1)
 		{
 			if (app->screen) renderTarget->CopyFrom( app->screen );
-			shader->Bind();
-			shader->SetInputTexture( 0, "c", renderTarget );
+			shader.Bind();
+			shader.SetInputTexture( 0, "c", renderTarget );
 			DrawQuad();
-			shader->Unbind();
+			shader.Unbind();
 			glfwSwapBuffers( window );
 			glfwPollEvents();
 		}
@@ -341,153 +240,9 @@ void main()
 	}
 	// close down
 	app->Shutdown();
-	Kernel::KillCL();
 	glfwDestroyWindow( window );
 	glfwTerminate();
 }
-
-//// Jobmanager implementation
-//DWORD JobThreadProc( LPVOID lpParameter )
-//{
-//	JobThread* JobThreadInstance = (JobThread*)lpParameter;
-//	JobThreadInstance->BackgroundTask();
-//	return 0;
-//}
-//
-//void JobThread::CreateAndStartThread( unsigned int threadId )
-//{
-//	m_GoSignal = CreateEvent( 0, FALSE, FALSE, 0 );
-//	m_ThreadHandle = CreateThread( 0, 0, (LPTHREAD_START_ROUTINE)&JobThreadProc, (LPVOID)this, 0, 0 );
-//	m_ThreadID = threadId;
-//}
-//void JobThread::BackgroundTask()
-//{
-//	while (1)
-//	{
-//		WaitForSingleObject( m_GoSignal, INFINITE );
-//		while (1)
-//		{
-//			Job* job = JobManager::GetJobManager()->GetNextJob();
-//			if (!job)
-//			{
-//				JobManager::GetJobManager()->ThreadDone( m_ThreadID );
-//				break;
-//			}
-//			job->RunCodeWrapper();
-//		}
-//	}
-//}
-//
-//void JobThread::Go()
-//{
-//	SetEvent( m_GoSignal );
-//}
-//
-//void Job::RunCodeWrapper()
-//{
-//	Main();
-//}
-//
-//JobManager* JobManager::m_JobManager = 0;
-//
-//JobManager::JobManager( unsigned int threads ) : m_NumThreads( threads )
-//{
-//	InitializeCriticalSection( &m_CS );
-//}
-//
-//JobManager::~JobManager()
-//{
-//	DeleteCriticalSection( &m_CS );
-//}
-//
-//void JobManager::CreateJobManager( unsigned int numThreads )
-//{
-//	m_JobManager = new JobManager( numThreads );
-//	m_JobManager->m_JobThreadList = new JobThread[numThreads];
-//	for (unsigned int i = 0; i < numThreads; i++)
-//	{
-//		m_JobManager->m_JobThreadList[i].CreateAndStartThread( i );
-//		m_JobManager->m_ThreadDone[i] = CreateEvent( 0, FALSE, FALSE, 0 );
-//	}
-//	m_JobManager->m_JobCount = 0;
-//}
-//
-//void JobManager::AddJob2( Job* a_Job )
-//{
-//	m_JobList[m_JobCount++] = a_Job;
-//}
-//
-//Job* JobManager::GetNextJob()
-//{
-//	Job* job = 0;
-//	EnterCriticalSection( &m_CS );
-//	if (m_JobCount > 0) job = m_JobList[--m_JobCount];
-//	LeaveCriticalSection( &m_CS );
-//	return job;
-//}
-//
-//void JobManager::RunJobs()
-//{
-//	if (m_JobCount == 0) return;
-//	for (unsigned int i = 0; i < m_NumThreads; i++) m_JobThreadList[i].Go();
-//	WaitForMultipleObjects( m_NumThreads, m_ThreadDone, TRUE, INFINITE );
-//}
-//
-//void JobManager::ThreadDone( unsigned int n )
-//{
-//	SetEvent( m_ThreadDone[n] );
-//}
-//
-//DWORD CountSetBits( ULONG_PTR bitMask )
-//{
-//	DWORD LSHIFT = sizeof( ULONG_PTR ) * 8 - 1, bitSetCount = 0;
-//	ULONG_PTR bitTest = (ULONG_PTR)1 << LSHIFT;
-//	for (DWORD i = 0; i <= LSHIFT; ++i) bitSetCount += ((bitMask & bitTest) ? 1 : 0), bitTest /= 2;
-//	return bitSetCount;
-//}
-//
-//void JobManager::GetProcessorCount( uint& cores, uint& logical )
-//{
-//	// https://github.com/GPUOpen-LibrariesAndSDKs/cpu-core-counts
-//	cores = logical = 0;
-//	char* buffer = NULL;
-//	DWORD len = 0;
-//	if (FALSE == GetLogicalProcessorInformationEx( RelationAll, (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)buffer, &len ))
-//	{
-//		if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
-//		{
-//			buffer = (char*)malloc( len );
-//			if (GetLogicalProcessorInformationEx( RelationAll, (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)buffer, &len ))
-//			{
-//				DWORD offset = 0;
-//				char* ptr = buffer;
-//				while (ptr < buffer + len)
-//				{
-//					PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX pi = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX)ptr;
-//					if (pi->Relationship == RelationProcessorCore)
-//					{
-//						cores++;
-//						for (size_t g = 0; g < pi->Processor.GroupCount; ++g)
-//							logical += CountSetBits( pi->Processor.GroupMask[g].Mask );
-//					}
-//					ptr += pi->Size;
-//				}
-//			}
-//			free( buffer );
-//		}
-//	}
-//}
-//
-//JobManager* JobManager::GetJobManager()
-//{
-//	if (!m_JobManager)
-//	{
-//		uint c, l;
-//		GetProcessorCount( c, l );
-//		CreateJobManager( l );
-//	}
-//	return m_JobManager;
-//}
 
 // RNG - Marsaglia's xor32
 static uint seed = 0x12345678;
@@ -637,389 +392,6 @@ void FatalError( const char* fmt, ... )
 	fprintf( stderr, t );
 #endif
 	while (1) exit( 0 );
-}
-
-// surface implementation
-// ----------------------------------------------------------------------------
-
-static char s_Font[51][5][6];
-static bool fontInitialized = false;
-static int s_Transl[256];
-
-Surface::Surface( int w, int h, uint* b ) : pixels( b ), width( w ), height( h ) {}
-Surface::Surface( int w, int h ) : width( w ), height( h )
-{
-	pixels = (uint*)MALLOC64( w * h * sizeof( uint ) );
-	ownBuffer = true; // needs to be deleted in destructor
-}
-Surface::Surface( const char* file ) : pixels( 0 ), width( 0 ), height( 0 )
-{
-	FILE* f = fopen( file, "rb" );
-	if (!f) FatalError( "File not found: %s", file );
-	fclose( f );
-	LoadImage( file );
-}
-
-void Surface::LoadImage( const char* file )
-{
-	int n;
-	unsigned char* data = stbi_load( file, &width, &height, &n, 0 );
-	if (data)
-	{
-		pixels = (uint*)MALLOC64( width * height * sizeof( uint ) );
-		ownBuffer = true; // needs to be deleted in destructor
-		const int s = width * height;
-		if (n == 1) // greyscale
-		{
-			for (int i = 0; i < s; i++)
-			{
-				const unsigned char p = data[i];
-				pixels[i] = p + (p << 8) + (p << 16);
-			}
-		}
-		else
-		{
-			for (int i = 0; i < s; i++) pixels[i] = (data[i * n + 0] << 16) + (data[i * n + 1] << 8) + data[i * n + 2];
-		}
-	}
-	stbi_image_free( data );
-}
-
-Surface::~Surface()
-{
-	if (ownBuffer) FREE64( pixels ); // free only if we allocated the buffer ourselves
-}
-
-void Surface::Clear( uint c )
-{
-	const int s = width * height;
-	for (int i = 0; i < s; i++) pixels[i] = c;
-}
-
-void Surface::Plot( int x, int y, uint c )
-{
-	if (x < 0 || y < 0 || x >= width || y >= height) return;
-	pixels[x + y * width] = c;
-}
-
-void Surface::Box( int x1, int y1, int x2, int y2, uint c )
-{
-	Line( (float)x1, (float)y1, (float)x2, (float)y1, c );
-	Line( (float)x2, (float)y1, (float)x2, (float)y2, c );
-	Line( (float)x1, (float)y2, (float)x2, (float)y2, c );
-	Line( (float)x1, (float)y1, (float)x1, (float)y2, c );
-}
-
-void Surface::Bar( int x1, int y1, int x2, int y2, uint c )
-{
-	// clipping
-	if (x1 < 0) x1 = 0;
-	if (x2 >= width) x2 = width - 1;
-	if (y1 < 0) y1 = 0;
-	if (y2 >= height) y2 = width - 1;
-	// draw clipped bar
-	uint* a = x1 + y1 * width + pixels;
-	for (int y = y1; y <= y2; y++)
-	{
-		for (int x = 0; x <= (x2 - x1); x++) a[x] = c;
-		a += width;
-	}
-}
-
-void Surface::Print( const char* s, int x1, int y1, uint c )
-{
-	if (!fontInitialized)
-	{
-		InitCharset();
-		fontInitialized = true;
-	}
-	uint* t = pixels + x1 + y1 * width;
-	for (int i = 0; i < (int)(strlen( s )); i++, t += 6)
-	{
-		int pos = 0;
-		if ((s[i] >= 'A') && (s[i] <= 'Z')) pos = s_Transl[(unsigned short)(s[i] - ('A' - 'a'))];
-		else pos = s_Transl[(unsigned short)s[i]];
-		uint* a = t;
-		const char* u = (const char*)s_Font[pos];
-		for (int v = 0; v < 5; v++, u++, a += width)
-			for (int h = 0; h < 5; h++) if (*u++ == 'o') *(a + h) = c, * (a + h + width) = 0;
-	}
-}
-
-#define OUTCODE(x,y) (((x)<xmin)?1:(((x)>xmax)?2:0))+(((y)<ymin)?4:(((y)>ymax)?8:0))
-
-void Surface::Line( float x1, float y1, float x2, float y2, uint c )
-{
-	// clip (Cohen-Sutherland, https://en.wikipedia.org/wiki/Cohen%E2%80%93Sutherland_algorithm)
-	const float xmin = 0, ymin = 0, xmax = (float)width - 1, ymax = (float)height - 1;
-	int c0 = OUTCODE( x1, y1 ), c1 = OUTCODE( x2, y2 );
-	bool accept = false;
-	while (1)
-	{
-		if (!(c0 | c1)) { accept = true; break; }
-		else if (c0 & c1) break; else
-		{
-			float x, y;
-			const int co = c0 ? c0 : c1;
-			if (co & 8) x = x1 + (x2 - x1) * (ymax - y1) / (y2 - y1), y = ymax;
-			else if (co & 4) x = x1 + (x2 - x1) * (ymin - y1) / (y2 - y1), y = ymin;
-			else if (co & 2) y = y1 + (y2 - y1) * (xmax - x1) / (x2 - x1), x = xmax;
-			else if (co & 1) y = y1 + (y2 - y1) * (xmin - x1) / (x2 - x1), x = xmin;
-			if (co == c0) x1 = x, y1 = y, c0 = OUTCODE( x1, y1 );
-			else x2 = x, y2 = y, c1 = OUTCODE( x2, y2 );
-		}
-	}
-	if (!accept) return;
-	float b = x2 - x1;
-	float h = y2 - y1;
-	float l = fabsf( b );
-	if (fabsf( h ) > l) l = fabsf( h );
-	int il = (int)l;
-	float dx = b / (float)l;
-	float dy = h / (float)l;
-	for (int i = 0; i <= il; i++)
-	{
-		*(pixels + (int)x1 + (int)y1 * width) = c;
-		x1 += dx, y1 += dy;
-	}
-}
-
-void Surface::CopyTo( Surface* d, int x, int y )
-{
-	uint* dst = d->pixels;
-	uint* src = pixels;
-	if ((src) && (dst))
-	{
-		int srcwidth = width;
-		int srcheight = height;
-		int dstwidth = d->width;
-		int dstheight = d->height;
-		if ((srcwidth + x) > dstwidth) srcwidth = dstwidth - x;
-		if ((srcheight + y) > dstheight) srcheight = dstheight - y;
-		if (x < 0) src -= x, srcwidth += x, x = 0;
-		if (y < 0) src -= y * srcwidth, srcheight += y, y = 0;
-		if ((srcwidth > 0) && (srcheight > 0))
-		{
-			dst += x + dstwidth * y;
-			for (int y = 0; y < srcheight; y++)
-			{
-				memcpy( dst, src, srcwidth * 4 );
-				dst += dstwidth, src += srcwidth;
-			}
-		}
-	}
-}
-
-void Surface::SetChar( int c, const char* c1, const char* c2, const char* c3, const char* c4, const char* c5 )
-{
-	strcpy( s_Font[c][0], c1 );
-	strcpy( s_Font[c][1], c2 );
-	strcpy( s_Font[c][2], c3 );
-	strcpy( s_Font[c][3], c4 );
-	strcpy( s_Font[c][4], c5 );
-}
-
-void Surface::InitCharset()
-{
-	SetChar( 0, ":ooo:", "o:::o", "ooooo", "o:::o", "o:::o" );
-	SetChar( 1, "oooo:", "o:::o", "oooo:", "o:::o", "oooo:" );
-	SetChar( 2, ":oooo", "o::::", "o::::", "o::::", ":oooo" );
-	SetChar( 3, "oooo:", "o:::o", "o:::o", "o:::o", "oooo:" );
-	SetChar( 4, "ooooo", "o::::", "oooo:", "o::::", "ooooo" );
-	SetChar( 5, "ooooo", "o::::", "ooo::", "o::::", "o::::" );
-	SetChar( 6, ":oooo", "o::::", "o:ooo", "o:::o", ":ooo:" );
-	SetChar( 7, "o:::o", "o:::o", "ooooo", "o:::o", "o:::o" );
-	SetChar( 8, "::o::", "::o::", "::o::", "::o::", "::o::" );
-	SetChar( 9, ":::o:", ":::o:", ":::o:", ":::o:", "ooo::" );
-	SetChar( 10, "o::o:", "o:o::", "oo:::", "o:o::", "o::o:" );
-	SetChar( 11, "o::::", "o::::", "o::::", "o::::", "ooooo" );
-	SetChar( 12, "oo:o:", "o:o:o", "o:o:o", "o:::o", "o:::o" );
-	SetChar( 13, "o:::o", "oo::o", "o:o:o", "o::oo", "o:::o" );
-	SetChar( 14, ":ooo:", "o:::o", "o:::o", "o:::o", ":ooo:" );
-	SetChar( 15, "oooo:", "o:::o", "oooo:", "o::::", "o::::" );
-	SetChar( 16, ":ooo:", "o:::o", "o:::o", "o::oo", ":oooo" );
-	SetChar( 17, "oooo:", "o:::o", "oooo:", "o:o::", "o::o:" );
-	SetChar( 18, ":oooo", "o::::", ":ooo:", "::::o", "oooo:" );
-	SetChar( 19, "ooooo", "::o::", "::o::", "::o::", "::o::" );
-	SetChar( 20, "o:::o", "o:::o", "o:::o", "o:::o", ":oooo" );
-	SetChar( 21, "o:::o", "o:::o", ":o:o:", ":o:o:", "::o::" );
-	SetChar( 22, "o:::o", "o:::o", "o:o:o", "o:o:o", ":o:o:" );
-	SetChar( 23, "o:::o", ":o:o:", "::o::", ":o:o:", "o:::o" );
-	SetChar( 24, "o:::o", "o:::o", ":oooo", "::::o", ":ooo:" );
-	SetChar( 25, "ooooo", ":::o:", "::o::", ":o:::", "ooooo" );
-	SetChar( 26, ":ooo:", "o::oo", "o:o:o", "oo::o", ":ooo:" );
-	SetChar( 27, "::o::", ":oo::", "::o::", "::o::", ":ooo:" );
-	SetChar( 28, ":ooo:", "o:::o", "::oo:", ":o:::", "ooooo" );
-	SetChar( 29, "oooo:", "::::o", "::oo:", "::::o", "oooo:" );
-	SetChar( 30, "o::::", "o::o:", "ooooo", ":::o:", ":::o:" );
-	SetChar( 31, "ooooo", "o::::", "oooo:", "::::o", "oooo:" );
-	SetChar( 32, ":oooo", "o::::", "oooo:", "o:::o", ":ooo:" );
-	SetChar( 33, "ooooo", "::::o", ":::o:", "::o::", "::o::" );
-	SetChar( 34, ":ooo:", "o:::o", ":ooo:", "o:::o", ":ooo:" );
-	SetChar( 35, ":ooo:", "o:::o", ":oooo", "::::o", ":ooo:" );
-	SetChar( 36, "::o::", "::o::", "::o::", ":::::", "::o::" );
-	SetChar( 37, ":ooo:", "::::o", ":::o:", ":::::", "::o::" );
-	SetChar( 38, ":::::", ":::::", "::o::", ":::::", "::o::" );
-	SetChar( 39, ":::::", ":::::", ":ooo:", ":::::", ":ooo:" );
-	SetChar( 40, ":::::", ":::::", ":::::", ":::o:", "::o::" );
-	SetChar( 41, ":::::", ":::::", ":::::", ":::::", "::o::" );
-	SetChar( 42, ":::::", ":::::", ":ooo:", ":::::", ":::::" );
-	SetChar( 43, ":::o:", "::o::", "::o::", "::o::", ":::o:" );
-	SetChar( 44, "::o::", ":::o:", ":::o:", ":::o:", "::o::" );
-	SetChar( 45, ":::::", ":::::", ":::::", ":::::", ":::::" );
-	SetChar( 46, "ooooo", "ooooo", "ooooo", "ooooo", "ooooo" );
-	SetChar( 47, "::o::", "::o::", ":::::", ":::::", ":::::" ); // Tnx Ferry
-	SetChar( 48, "o:o:o", ":ooo:", "ooooo", ":ooo:", "o:o:o" );
-	SetChar( 49, "::::o", ":::o:", "::o::", ":o:::", "o::::" );
-	char c[] = "abcdefghijklmnopqrstuvwxyz0123456789!?:=,.-() #'*/";
-	int i;
-	for (i = 0; i < 256; i++) s_Transl[i] = 45;
-	for (i = 0; i < 50; i++) s_Transl[(unsigned char)c[i]] = i;
-}
-
-Sprite::Sprite( Surface* a_Surface, unsigned int a_NumFrames ) :
-	width( a_Surface->width / a_NumFrames ),
-	height( a_Surface->height ),
-	numFrames( a_NumFrames ),
-	currentFrame( 0 ),
-	flags( 0 ),
-	start( new unsigned int* [a_NumFrames] ),
-	surface( a_Surface )
-{
-	InitializeStartData();
-}
-
-Sprite::~Sprite()
-{
-	delete surface;
-	for (unsigned int i = 0; i < numFrames; i++) delete start[i];
-	delete start;
-}
-
-void Sprite::Draw( Surface* a_Target, int a_X, int a_Y )
-{
-	if ((a_X < -width) || (a_X > ( a_Target->width + width ))) return;
-	if ((a_Y < -height) || (a_Y > ( a_Target->height + height ))) return;
-	int x1 = a_X, x2 = a_X + width;
-	int y1 = a_Y, y2 = a_Y + height;
-	uint* src = GetBuffer() + currentFrame * width;
-	if (x1 < 0) src += -x1, x1 = 0;
-	if (x2 > a_Target->width) x2 = a_Target->width;
-	if (y1 < 0) src += -y1 * width * numFrames, y1 = 0;
-	if (y2 > a_Target->height) y2 = a_Target->height;
-	uint* dest = a_Target->pixels;
-	int xs;
-	const int dpitch = a_Target->width;
-	if ((x2 > x1) && (y2 > y1))
-	{
-		unsigned int addr = y1 * dpitch + x1;
-		const int w = x2 - x1;
-		const int h = y2 - y1;
-		for (int y = 0; y < h; y++)
-		{
-			const int line = y + (y1 - a_Y);
-			const int lsx = start[currentFrame][line] + a_X;
-			xs = (lsx > x1) ? lsx - x1 : 0;
-			for (int x = xs; x < w; x++)
-			{
-				const uint c1 = *(src + x);
-				if (c1 & 0xffffff) *(dest + addr + x) = c1;
-			}
-			addr += dpitch;
-			src += width * numFrames;
-		}
-	}
-}
-
-void Sprite::DrawScaled( int a_X, int a_Y, int a_Width, int a_Height, Surface* a_Target )
-{
-	if ((a_Width == 0) || (a_Height == 0)) return;
-	for (int x = 0; x < a_Width; x++) for (int y = 0; y < a_Height; y++)
-	{
-		int u = (int)((float)x * ((float)width / (float)a_Width));
-		int v = (int)((float)y * ((float)height / (float)a_Height));
-		uint color = GetBuffer()[u + v * width * numFrames];
-		if (color & 0xffffff) a_Target->pixels[a_X + x + ((a_Y + y) * a_Target->width)] = color;
-	}
-}
-
-void Sprite::InitializeStartData()
-{
-	for (unsigned int f = 0; f < numFrames; ++f)
-	{
-		start[f] = new unsigned int[height];
-		for (int y = 0; y < height; ++y)
-		{
-			start[f][y] = width;
-			uint* addr = GetBuffer() + f * width + y * width * numFrames;
-			for (int x = 0; x < width; ++x) if (addr[x])
-			{
-				start[f][y] = x;
-				break;
-			}
-		}
-	}
-}
-
-CPUCaps::CPUCaps()
-{
-#ifdef _WIN32
-#define cpuid(info, x) __cpuidex(info, x, 0)
-#else
-#include <cpuid.h>
-	void cpuid(int info[4], int InfoType) { __cpuid_count(InfoType, 0, info[0], info[1], info[2], info[3]); }
-#endif
-
-	int info[4];
-	cpuid(info, 0);
-	int nIds = info[0];
-	cpuid(info, 0x80000000);
-	unsigned nExIds = info[0];
-	// detect Features
-	if (nIds >= 0x00000001)
-	{
-		cpuid(info, 0x00000001);
-		HW_MMX = (info[3] & ((int)1 << 23)) != 0;
-		HW_SSE = (info[3] & ((int)1 << 25)) != 0;
-		HW_SSE2 = (info[3] & ((int)1 << 26)) != 0;
-		HW_SSE3 = (info[2] & ((int)1 << 0)) != 0;
-		HW_SSSE3 = (info[2] & ((int)1 << 9)) != 0;
-		HW_SSE41 = (info[2] & ((int)1 << 19)) != 0;
-		HW_SSE42 = (info[2] & ((int)1 << 20)) != 0;
-		HW_AES = (info[2] & ((int)1 << 25)) != 0;
-		HW_AVX = (info[2] & ((int)1 << 28)) != 0;
-		HW_FMA3 = (info[2] & ((int)1 << 12)) != 0;
-		HW_RDRAND = (info[2] & ((int)1 << 30)) != 0;
-	}
-	if (nIds >= 0x00000007)
-	{
-		cpuid(info, 0x00000007);
-		HW_AVX2 = (info[1] & ((int)1 << 5)) != 0;
-		HW_BMI1 = (info[1] & ((int)1 << 3)) != 0;
-		HW_BMI2 = (info[1] & ((int)1 << 8)) != 0;
-		HW_ADX = (info[1] & ((int)1 << 19)) != 0;
-		HW_SHA = (info[1] & ((int)1 << 29)) != 0;
-		HW_PREFETCHWT1 = (info[2] & ((int)1 << 0)) != 0;
-		HW_AVX512F = (info[1] & ((int)1 << 16)) != 0;
-		HW_AVX512CD = (info[1] & ((int)1 << 28)) != 0;
-		HW_AVX512PF = (info[1] & ((int)1 << 26)) != 0;
-		HW_AVX512ER = (info[1] & ((int)1 << 27)) != 0;
-		HW_AVX512VL = (info[1] & ((int)1 << 31)) != 0;
-		HW_AVX512BW = (info[1] & ((int)1 << 30)) != 0;
-		HW_AVX512DQ = (info[1] & ((int)1 << 17)) != 0;
-		HW_AVX512IFMA = (info[1] & ((int)1 << 21)) != 0;
-		HW_AVX512VBMI = (info[2] & ((int)1 << 1)) != 0;
-	}
-	if (nExIds >= 0x80000001)
-	{
-		cpuid(info, 0x80000001);
-		HW_x64 = (info[3] & ((int)1 << 29)) != 0;
-		HW_ABM = (info[2] & ((int)1 << 5)) != 0;
-		HW_SSE4a = (info[2] & ((int)1 << 6)) != 0;
-		HW_FMA4 = (info[2] & ((int)1 << 16)) != 0;
-		HW_XOP = (info[2] & ((int)1 << 11)) != 0;
-	}
-#undef cpuid
 }
 
 /*

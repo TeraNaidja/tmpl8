@@ -53,11 +53,11 @@ namespace Tmpl8
 #if 1
 		void Run(cl_event* eventToWaitFor = 0, cl_event* eventToSet = 0);
 		void Run(cl_mem* buffers, const int count = 1, cl_event* eventToWaitFor = 0, cl_event* eventToSet = 0, cl_event* acq = 0, cl_event* rel = 0);
-		void Run(Buffer* buffer, const int2 localSize = make_int2(32, 2), cl_event* eventToWaitFor = 0, cl_event* eventToSet = 0, cl_event* acq = 0, cl_event* rel = 0);
+		void Run(Buffer* buffer, const int2 localSize = int2(32, 2), cl_event* eventToWaitFor = 0, cl_event* eventToSet = 0, cl_event* acq = 0, cl_event* rel = 0);
 		void Run(Buffer* buffer, const int count = 1, cl_event* eventToWaitFor = 0, cl_event* eventToSet = 0, cl_event* acq = 0, cl_event* rel = 0);
 #endif
 		void Run(const size_t count, const size_t localSize = 0, cl_event* eventToWaitFor = 0, cl_event* eventToSet = 0);
-		void Run2D(const int2 count, const int2 lsize = 0, cl_event* eventToWaitFor = 0, cl_event* eventToSet = 0);
+		void Run2D(const int2 count, const int2 lsize = int2(0), cl_event* eventToWaitFor = 0, cl_event* eventToSet = 0);
 		// argument passing with template trickery
 #define T_ typename
 		template<T_ A> void SetArguments(A a) { InitArgs(); SetArgument(0, a); }

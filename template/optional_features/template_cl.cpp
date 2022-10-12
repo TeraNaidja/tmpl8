@@ -142,9 +142,9 @@ namespace Tmpl8 {
 	{
 		size_t dataSize;
 		cl_device_id* devices;
-		clGetContextInfo(context, CL_CONTEXT_DEVICES, 0, NULL, &dataSize);
+		clGetContextInfo(context, CL_CONTEXT_DEVICES, 0, nullptr, &dataSize);
 		devices = (cl_device_id*)malloc(dataSize);
-		clGetContextInfo(context, CL_CONTEXT_DEVICES, dataSize, devices, NULL);
+		clGetContextInfo(context, CL_CONTEXT_DEVICES, dataSize, devices, nullptr);
 		cl_device_id first = devices[0];
 		free(devices);
 		return first;
@@ -158,11 +158,11 @@ namespace Tmpl8 {
 		cl_uint num_platforms, devCount;
 		cl_platform_id* clPlatformIDs;
 		cl_int error;
-		*platform = NULL;
+		*platform = nullptr;
 		CHECKCL(error = clGetPlatformIDs(0, NULL, &num_platforms));
 		if (num_platforms == 0) CHECKCL(-1);
 		clPlatformIDs = (cl_platform_id*)malloc(num_platforms * sizeof(cl_platform_id));
-		error = clGetPlatformIDs(num_platforms, clPlatformIDs, NULL);
+		error = clGetPlatformIDs(num_platforms, clPlatformIDs, nullptr);
 		cl_uint deviceType[2] = { CL_DEVICE_TYPE_GPU, CL_DEVICE_TYPE_CPU };
 		char* deviceOrder[2][3] = { { "NVIDIA", "AMD", "" }, { "", "", "" } };
 		printf("available OpenCL platforms:\n");
@@ -173,7 +173,7 @@ namespace Tmpl8 {
 		}
 		for (cl_uint j = 0; j < 2; j++) for (int k = 0; k < 3; k++) for (cl_uint i = 0; i < num_platforms; ++i)
 		{
-			error = clGetDeviceIDs(clPlatformIDs[i], deviceType[j], 0, NULL, &devCount);
+			error = clGetDeviceIDs(clPlatformIDs[i], deviceType[j], 0, nullptr, &devCount);
 			if ((error != CL_SUCCESS) || (devCount == 0)) continue;
 			CHECKCL(error = clGetPlatformInfo(clPlatformIDs[i], CL_PLATFORM_NAME, 1024, &chBuffer, NULL));
 			if (deviceOrder[j][k][0]) if (!strstr(chBuffer, deviceOrder[j][k])) continue;
@@ -200,7 +200,7 @@ namespace Tmpl8 {
 		{
 			size = N;
 			textureID = 0; // not representing a texture
-			deviceBuffer = clCreateBuffer(Kernel::GetContext(), rwFlags, size, 0, 0);
+			deviceBuffer = clCreateBuffer(Kernel::GetContext(), rwFlags, size, nullptr, nullptr);
 			hostBuffer = (uint*)ptr;
 		}
 		else
@@ -211,7 +211,7 @@ namespace Tmpl8 {
 			if (t == TARGET) deviceBuffer = clCreateFromGLTexture(Kernel::GetContext(), CL_MEM_WRITE_ONLY, GL_TEXTURE_2D, 0, N, &error);
 			else deviceBuffer = clCreateFromGLTexture(Kernel::GetContext(), CL_MEM_READ_ONLY, GL_TEXTURE_2D, 0, N, &error);
 			CHECKCL(error);
-			hostBuffer = 0;
+			hostBuffer = nullptr;
 		}
 	}
 
@@ -221,8 +221,8 @@ namespace Tmpl8 {
 	{
 		if (ownData)
 		{
-			FREE64(hostBuffer);
-			hostBuffer = 0;
+			delete [] hostBuffer;
+			hostBuffer = nullptr;
 		}
 		if ((type & (TEXTURE | TARGET)) == 0) clReleaseMemObject(deviceBuffer);
 	}
@@ -250,7 +250,8 @@ namespace Tmpl8 {
 		cl_int error;
 		if (!hostBuffer)
 		{
-			hostBuffer = (uint*)MALLOC64(size);
+			assert(size % 4 == 0);
+			hostBuffer = new uint[size / 4];
 			ownData = true;
 			aligned = true;
 		}
@@ -261,7 +262,7 @@ namespace Tmpl8 {
 	// ----------------------------------------------------------------------------
 	void Buffer::CopyTo(Buffer* buffer)
 	{
-		clEnqueueCopyBuffer(Kernel::GetQueue(), deviceBuffer, buffer->deviceBuffer, 0, 0, size, 0, 0, 0);
+		clEnqueueCopyBuffer(Kernel::GetQueue(), deviceBuffer, buffer->deviceBuffer, 0, 0, size, 0, nullptr, nullptr);
 	}
 
 	// Clear
@@ -344,7 +345,7 @@ namespace Tmpl8 {
 		// -cl-no-subgroup-ifp ? fails on nvidia.
 #if 1
 	// AMD compatible compilation, thanks Jasper the Winther
-		error = clBuildProgram(program, 0, NULL, "-cl-fast-relaxed-math -cl-mad-enable -cl-single-precision-constant", NULL, NULL);
+		error = clBuildProgram(program, 0, nullptr, "-cl-fast-relaxed-math -cl-mad-enable -cl-single-precision-constant", nullptr, nullptr);
 
 #else
 		error = clBuildProgram(program, 0, NULL, "-cl-nv-verbose -cl-fast-relaxed-math -cl-mad-enable -cl-single-precision-constant", NULL, NULL);
@@ -433,7 +434,7 @@ namespace Tmpl8 {
 			}
 		}
 		kernel = clCreateKernel(program, entryPoint, &error);
-		if (kernel == 0) FatalError("clCreateKernel failed: entry point not found.");
+		if (kernel == nullptr) FatalError("clCreateKernel failed: entry point not found.");
 		CHECKCL(error);
 	}
 
@@ -443,7 +444,7 @@ namespace Tmpl8 {
 		cl_int error;
 		program = existingProgram;
 		kernel = clCreateKernel(program, entryPoint, &error);
-		if (kernel == 0) FatalError("clCreateKernel failed: entry point not found.");
+		if (kernel == nullptr) FatalError("clCreateKernel failed: entry point not found.");
 		CHECKCL(error);
 	}
 
@@ -453,7 +454,7 @@ namespace Tmpl8 {
 	{
 		if (kernel) clReleaseKernel(kernel);
 		// if (program) clReleaseProgram( program ); // NOTE: may be shared with other kernels
-		kernel = 0;
+		kernel = nullptr;
 		// program = 0;
 	}
 
@@ -510,7 +511,7 @@ namespace Tmpl8 {
 						CL_CONTEXT_PLATFORM, (cl_context_properties)platform, 0
 					};
 					// attempt to create a context with the requested features
-					context = clCreateContext(props, 1, &devices[i], NULL, NULL, &error);
+					context = clCreateContext(props, 1, &devices[i], nullptr, nullptr, &error);
 					if (error == CL_SUCCESS)
 					{
 						candoInterop = true;
@@ -525,8 +526,8 @@ namespace Tmpl8 {
 		device = getFirstDevice(context);
 		if (!CHECKCL(error)) return false;
 		// print device name
-		clGetDeviceInfo(devices[deviceUsed], CL_DEVICE_NAME, 1024, &device_string, NULL);
-		clGetDeviceInfo(devices[deviceUsed], CL_DEVICE_VERSION, 1024, &device_platform, NULL);
+		clGetDeviceInfo(devices[deviceUsed], CL_DEVICE_NAME, 1024, &device_string, nullptr);
+		clGetDeviceInfo(devices[deviceUsed], CL_DEVICE_VERSION, 1024, &device_platform, nullptr);
 		printf("Device # %u, %s (%s)\n", deviceUsed, device_string, device_platform);
 		// digest device string
 		char* d = device_string;

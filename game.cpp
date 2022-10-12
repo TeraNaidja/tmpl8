@@ -1,6 +1,9 @@
 #include "precomp.h"
 #include "game.h"
 
+#include "sprite.h"
+#include "surface.h"
+
 namespace Tmpl8
 {
 	// -----------------------------------------------------------

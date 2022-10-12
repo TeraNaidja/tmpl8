@@ -1,10 +1,5 @@
 #pragma once
 
-// GLFW
-#define GLFW_USE_CHDIR 0
-#include <glad.h>
-#include <GLFW/glfw3.h>
-
 class mat4;
 namespace Tmpl8
 {
@@ -24,7 +19,7 @@ namespace Tmpl8
 		void CopyTo(Surface* dst);
 	public:
 		// public data members
-		GLuint ID = 0;
+		unsigned int ID = 0; //GLUint
 		uint width = 0, height = 0;
 	};
 
@@ -57,10 +52,10 @@ namespace Tmpl8
 	
 	// forward declarations of helper functions
 	void _CheckGL(const char* f, int l);
-	GLuint CreateVBO(const GLfloat* data, const uint size);
-	void BindVBO(const uint idx, const uint N, const GLuint id);
-	void CheckShader(GLuint shader, const char* vshader, const char* fshader);
-	void CheckProgram(GLuint id, const char* vshader, const char* fshader);
+	uint CreateVBO(const float* data, const uint size);
+	void BindVBO(const uint idx, const uint N, const uint id);
+	void CheckShader(uint shader, const char* vshader, const char* fshader);
+	void CheckProgram(uint id, const char* vshader, const char* fshader);
 	void DrawQuad();
 
 #define CheckGL() { _CheckGL( __FILE__, __LINE__ ); }

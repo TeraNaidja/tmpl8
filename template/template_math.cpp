@@ -3,28 +3,6 @@
 
 using namespace Tmpl8;
 
-// math implementations
-float4::float4(const float3& a, const float d)
-{
-	x = a.x, y = a.y, z = a.z;
-	w = d;
-}
-float4::float4(const float3& a)
-{
-	x = a.x, y = a.y, z = a.z;
-	w = 0;
-}
-int4::int4(const int3& a, const int d)
-{
-	x = a.x, y = a.y, z = a.z;
-	w = d;
-}
-uint4::uint4(const uint3& a, const uint d)
-{
-	x = a.x, y = a.y, z = a.z;
-	w = d;
-}
-
 mat4& mat4::operator+=(const mat4& a)
 {
 	for (int i = 0; i < 16; i++) cell[i] += a.cell[i];
@@ -32,7 +10,7 @@ mat4& mat4::operator+=(const mat4& a)
 }
 
 float3 mat4::GetTranslation() const
-{ return make_float3(cell[3], cell[7], cell[11]); }
+{ return float3(cell[3], cell[7], cell[11]); }
 
 mat4 mat4::FromColumnMajor(const mat4& T)
 {
@@ -59,7 +37,7 @@ mat4 mat4::Rotate(const float x, const float y, const float z, const float a)
 mat4 mat4::LookAt(const float3 P, const float3 T)
 {
 	const float3 z = normalize(T - P);
-	const float3 x = normalize(cross(z, make_float3(0, 1, 0)));
+	const float3 x = normalize(cross(z, float3(0, 1, 0)));
 	const float3 y = cross(x, z);
 	mat4 M = Translate(P);
 	M[0] = x.x, M[4] = x.y, M[8] = x.z;
@@ -178,14 +156,14 @@ mat4 mat4::Inverted3x3() const
 
 float3 mat4::TransformVector(const float3& v) const
 {
-	return make_float3(cell[0] * v.x + cell[1] * v.y + cell[2] * v.z,
+	return float3(cell[0] * v.x + cell[1] * v.y + cell[2] * v.z,
 		cell[4] * v.x + cell[5] * v.y + cell[6] * v.z,
 		cell[8] * v.x + cell[9] * v.y + cell[10] * v.z);
 }
 
 float3 mat4::TransformPoint(const float3& v) const
 {
-	const float3 res = make_float3(
+	const float3 res = float3(
 		cell[0] * v.x + cell[1] * v.y + cell[2] * v.z + cell[3],
 		cell[4] * v.x + cell[5] * v.y + cell[6] * v.z + cell[7],
 		cell[8] * v.x + cell[9] * v.y + cell[10] * v.z + cell[11]);
@@ -238,25 +216,25 @@ bool Tmpl8::operator==(const mat4& a, const mat4& b)
 bool Tmpl8::operator!=(const mat4& a, const mat4& b) { return !(a == b); }
 float4 Tmpl8::operator*(const mat4& a, const float4& b)
 {
-	return make_float4(a.cell[0] * b.x + a.cell[1] * b.y + a.cell[2] * b.z + a.cell[3] * b.w,
+	return float4(a.cell[0] * b.x + a.cell[1] * b.y + a.cell[2] * b.z + a.cell[3] * b.w,
 		a.cell[4] * b.x + a.cell[5] * b.y + a.cell[6] * b.z + a.cell[7] * b.w,
 		a.cell[8] * b.x + a.cell[9] * b.y + a.cell[10] * b.z + a.cell[11] * b.w,
 		a.cell[12] * b.x + a.cell[13] * b.y + a.cell[14] * b.z + a.cell[15] * b.w);
 }
 float4 Tmpl8::operator*(const float4& a, const mat4& b)
 {
-	return make_float4(b.cell[0] * a.x + b.cell[1] * a.y + b.cell[2] * a.z + b.cell[3] * a.w,
+	return float4(b.cell[0] * a.x + b.cell[1] * a.y + b.cell[2] * a.z + b.cell[3] * a.w,
 		b.cell[4] * a.x + b.cell[5] * a.y + b.cell[6] * a.z + b.cell[7] * a.w,
 		b.cell[8] * a.x + b.cell[9] * a.y + b.cell[10] * a.z + b.cell[11] * a.w,
 		b.cell[12] * a.x + b.cell[13] * a.y + b.cell[14] * a.z + b.cell[15] * a.w);
 }
 float3 Tmpl8::TransformPosition(const float3& a, const mat4& M)
 {
-	return make_float3(make_float4(a, 1) * M);
+	return (float4(a, 1) * M).xyz;
 }
 float3 Tmpl8::TransformVector(const float3& a, const mat4& M)
 {
-	return make_float3(make_float4(a, 0) * M);
+	return (float4(a, 0) * M).xyz;
 }
 
 void quat::fromAxisAngle(const float3& axis, float theta)
@@ -335,7 +313,7 @@ float3 quat::toAngularVelocity(float dt) const
 
 float3 quat::rotateVector(const float3& v) const
 {
-	float3 qv = make_float3(x, y, z), t = cross(qv, v) * 2.0f;
+	float3 qv = float3(x, y, z), t = cross(qv, v) * 2.0f;
 	return v + t * w + cross(qv, t);
 }
 

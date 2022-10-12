@@ -21,7 +21,7 @@
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <CharacterSet>NotSet</CharacterSet>
-    <PlatformToolset>v142</PlatformToolset>
+    <PlatformToolset>v143</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -121,26 +121,34 @@
   </ItemDefinitionGroup>
   <!-- END Custom section -->
   <ItemGroup>
+    <ClCompile Include="template\optional_features\CPUCaps.cpp" />
     <ClCompile Include="game.cpp" />
+    <ClCompile Include="template\sprite.cpp" />
+    <ClCompile Include="template\surface.cpp" />
     <ClCompile Include="template\template.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">precomp.h</PrecompiledHeaderFile>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
       <PrecompiledHeaderFile Condition="'$(Configuration)|$(Platform)'=='Release|x64'">precomp.h</PrecompiledHeaderFile>
     </ClCompile>
-    <ClCompile Include="template\template_cl.cpp" />
+    <ClCompile Include="template\optional_features\template_cl.cpp" />
     <ClCompile Include="template\template_gl.cpp" />
     <ClCompile Include="template\template_math.cpp" />
+    <ClCompile Include="template\timer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cl\tools.cl" />
+    <ClInclude Include="template\optional_features\CPUCaps.h" />
     <ClInclude Include="game.h" />
+    <ClInclude Include="template\sprite.h" />
+    <ClInclude Include="template\surface.h" />
     <ClInclude Include="template\template.h" />
     <ClInclude Include="template\common.h" />
     <ClInclude Include="template\precomp.h" />
-    <ClInclude Include="template\template_cl.h" />
+    <ClInclude Include="template\optional_features\template_cl.h" />
     <ClInclude Include="template\template_gl.h" />
     <ClInclude Include="template\template_math.h" />
+    <ClInclude Include="template\timer.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="cl\kernels.cl" />

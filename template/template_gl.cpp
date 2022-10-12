@@ -1,7 +1,10 @@
 #include "precomp.h"
 #include "template_gl.h"
 
+#include "surface.h"
 #include "template.h"
+
+#include <glad.h>
 
 using namespace Tmpl8;
 

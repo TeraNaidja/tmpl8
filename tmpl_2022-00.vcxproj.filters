@@ -11,9 +11,13 @@
     <ClCompile Include="template\template_math.cpp">
       <Filter>template</Filter>
     </ClCompile>
-    <ClCompile Include="template\template_cl.cpp">
+    <ClCompile Include="template\optional_features\template_cl.cpp">
       <Filter>template</Filter>
     </ClCompile>
+    <ClCompile Include="template\timer.cpp" />
+    <ClCompile Include="template\surface.cpp" />
+    <ClCompile Include="template\sprite.cpp" />
+    <ClCompile Include="template\optional_features\CPUCaps.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="template\common.h">
@@ -35,9 +39,13 @@
     <ClInclude Include="template\template_math.h">
       <Filter>template</Filter>
     </ClInclude>
-    <ClInclude Include="template\template_cl.h">
+    <ClInclude Include="template\optional_features\template_cl.h">
       <Filter>template</Filter>
     </ClInclude>
+    <ClInclude Include="template\timer.h" />
+    <ClInclude Include="template\surface.h" />
+    <ClInclude Include="template\sprite.h" />
+    <ClInclude Include="template\optional_features\CPUCaps.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="template\LICENSE">
