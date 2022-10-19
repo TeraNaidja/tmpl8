@@ -141,9 +141,9 @@ namespace Tmpl8 {
 	static cl_device_id getFirstDevice(cl_context context)
 	{
 		size_t dataSize;
-		cl_device_id* devices;
 		clGetContextInfo(context, CL_CONTEXT_DEVICES, 0, nullptr, &dataSize);
-		devices = (cl_device_id*)malloc(dataSize);
+		cl_device_id* devices = static_cast<cl_device_id*>(malloc(dataSize));
+		assert(devices);
 		clGetContextInfo(context, CL_CONTEXT_DEVICES, dataSize, devices, nullptr);
 		cl_device_id first = devices[0];
 		free(devices);
@@ -154,17 +154,17 @@ namespace Tmpl8 {
 	// ----------------------------------------------------------------------------
 	static cl_int getPlatformID(cl_platform_id* platform)
 	{
-		char chBuffer[1024];
+		char chBuffer[1024]{};
 		cl_uint num_platforms, devCount;
-		cl_platform_id* clPlatformIDs;
 		cl_int error;
 		*platform = nullptr;
 		CHECKCL(error = clGetPlatformIDs(0, NULL, &num_platforms));
 		if (num_platforms == 0) CHECKCL(-1);
-		clPlatformIDs = (cl_platform_id*)malloc(num_platforms * sizeof(cl_platform_id));
+		cl_platform_id* clPlatformIDs = static_cast<cl_platform_id*>(malloc(num_platforms * sizeof(cl_platform_id)));
+		assert(clPlatformIDs);
 		error = clGetPlatformIDs(num_platforms, clPlatformIDs, nullptr);
 		cl_uint deviceType[2] = { CL_DEVICE_TYPE_GPU, CL_DEVICE_TYPE_CPU };
-		char* deviceOrder[2][3] = { { "NVIDIA", "AMD", "" }, { "", "", "" } };
+		const char* deviceOrder[2][3] = { { "NVIDIA", "AMD", "" }, { "", "", "" } };
 		printf("available OpenCL platforms:\n");
 		for (cl_uint i = 0; i < num_platforms; ++i)
 		{
@@ -298,7 +298,7 @@ namespace Tmpl8 {
 		if (isPascal) csText = "#define ISPASCAL\n" + csText, vendorLines++;
 		// expand #include directives: cl compiler doesn't support these natively
 		// warning: this simple system does not handle nested includes.
-		struct Include { int start, end; string file; } includes[64];
+		struct Include { int start{}, end{}; string file{}; } includes[64];
 		int Ninc = 0;
 #if 0 // needed for NVIDIA OpenCL 1.0; this no longer is necessary
 		while (1)
@@ -481,7 +481,8 @@ namespace Tmpl8 {
 			CHECKCL(error = clGetDeviceInfo(devices[i], CL_DEVICE_EXTENSIONS, 0, NULL, &extensionSize));
 			if (extensionSize > 0)
 			{
-				char* extensions = (char*)malloc(extensionSize);
+				char* extensions = static_cast<char*>(malloc(extensionSize));
+				assert(extensions);
 				CHECKCL(error = clGetDeviceInfo(devices[i], CL_DEVICE_EXTENSIONS, extensionSize, extensions, &extensionSize));
 				string deviceList(extensions);
 				free(extensions);
@@ -609,7 +610,7 @@ namespace Tmpl8 {
 		queue2 = clCreateCommandQueue(context, devices[deviceUsed], CL_QUEUE_PROFILING_ENABLE, &error);
 		if (!CHECKCL(error)) return false;
 		// cleanup
-		delete devices;
+		delete[] devices;
 		clStarted = true;
 		return true;
 	}

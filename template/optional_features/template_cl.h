@@ -27,10 +27,10 @@ namespace Tmpl8
 		void CopyTo(Buffer* buffer);
 		void Clear();
 		// data members
-		unsigned int* hostBuffer;
+		unsigned int* hostBuffer{ nullptr };
 		cl_mem deviceBuffer = 0;
-		unsigned int type, size /* in bytes */, textureID;
-		bool ownData, aligned;
+		unsigned int type{}, size{} /* in bytes */, textureID{};
+		bool ownData{ false }, aligned{ false };
 	};
 
 	// OpenCL kernel
@@ -182,9 +182,9 @@ namespace Tmpl8
 	private:
 		// data members
 		Buffer* acqBuffer = 0;
-		cl_kernel kernel;
-		cl_mem vbo_cl;
-		cl_program program;
+		cl_kernel kernel{};
+		cl_mem vbo_cl{};
+		cl_program program{};
 		inline static cl_device_id device;
 		inline static cl_context context; // simplifies some things, but limits us to one device
 		inline static cl_command_queue queue, queue2;

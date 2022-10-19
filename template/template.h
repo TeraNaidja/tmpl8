@@ -63,7 +63,7 @@ float Rand(float range);
 float noise2D(const float x, const float y);
 
 // forward declaration of helper functions
-void FatalError(const char* fmt, ...);
+[[noreturn]] void FatalError(const char* fmt, ...);
 bool FileIsNewer(const char* file1, const char* file2);
 bool FileExists(const char* f);
 bool RemoveFile(const char* f);

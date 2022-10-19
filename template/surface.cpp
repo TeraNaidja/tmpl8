@@ -14,14 +14,17 @@ Tmpl8::Surface::Surface(int w, int h, uint* b) : pixels(b), width(w), height(h) 
 
 Tmpl8::Surface::Surface(int w, int h) : width(w), height(h)
 {
-	pixels = new uint[w * h];
+	pixels = new uint[static_cast<size_t>(w * h)];
 	ownBuffer = true; // needs to be deleted in destructor
 }
 
 Tmpl8::Surface::Surface(const char* file) : pixels(nullptr), width(0), height(0)
 {
 	FILE* f = fopen(file, "rb");
-	if (!f) FatalError("File not found: %s", file);
+	if (f == nullptr)
+	{
+		FatalError("File not found: %s", file);
+	}
 	fclose(f);
 	LoadImage(file);
 }

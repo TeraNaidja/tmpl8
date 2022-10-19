@@ -18,6 +18,7 @@
     <ClCompile Include="template\surface.cpp" />
     <ClCompile Include="template\sprite.cpp" />
     <ClCompile Include="template\optional_features\CPUCaps.cpp" />
+    <ClCompile Include="lib\glad\glad.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="template\common.h">
@@ -27,9 +28,6 @@
       <Filter>template</Filter>
     </ClInclude>
     <ClInclude Include="game.h" />
-    <ClInclude Include="cl\tools.cl">
-      <Filter>template\cl</Filter>
-    </ClInclude>
     <ClInclude Include="template\template.h">
       <Filter>template</Filter>
     </ClInclude>
@@ -46,6 +44,7 @@
     <ClInclude Include="template\surface.h" />
     <ClInclude Include="template\sprite.h" />
     <ClInclude Include="template\optional_features\CPUCaps.h" />
+    <ClInclude Include="lib\glad\glad.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="template\LICENSE">
@@ -53,9 +52,6 @@
     </None>
     <None Include="README.md">
       <Filter>template</Filter>
-    </None>
-    <None Include="cl\kernels.cl">
-      <Filter>template\cl</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

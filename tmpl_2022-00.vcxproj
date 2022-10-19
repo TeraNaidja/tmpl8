@@ -121,6 +121,7 @@
   </ItemDefinitionGroup>
   <!-- END Custom section -->
   <ItemGroup>
+    <ClCompile Include="lib\glad\glad.cpp" />
     <ClCompile Include="template\optional_features\CPUCaps.cpp" />
     <ClCompile Include="game.cpp" />
     <ClCompile Include="template\sprite.cpp" />
@@ -137,7 +138,7 @@
     <ClCompile Include="template\timer.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="cl\tools.cl" />
+    <ClInclude Include="lib\glad\glad.h" />
     <ClInclude Include="template\optional_features\CPUCaps.h" />
     <ClInclude Include="game.h" />
     <ClInclude Include="template\sprite.h" />
@@ -151,7 +152,6 @@
     <ClInclude Include="template\timer.h" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="cl\kernels.cl" />
     <None Include="README.md" />
     <None Include="template\LICENSE" />
   </ItemGroup>

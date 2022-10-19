@@ -18,7 +18,7 @@ public:
 	void KeyUp( int key ) { /* implement if you want to handle keys */ }
 	void KeyDown( int key ) { /* implement if you want to handle keys */ }
 	// data members
-	int2 mousePos;
+	int2 mousePos{ 0, 0 };
 };
 
 } // namespace Tmpl8

@@ -30,10 +30,18 @@ void Tmpl8::Sprite::Draw(Surface* a_Target, int a_X, int a_Y)
 	if ((a_Y < -height) || (a_Y > (a_Target->height + height))) return;
 	int x1 = a_X, x2 = a_X + width;
 	int y1 = a_Y, y2 = a_Y + height;
-	uint* src = GetBuffer() + currentFrame * width;
-	if (x1 < 0) src += -x1, x1 = 0;
+	uint* src = GetBuffer() + static_cast<size_t>(currentFrame * width);
+	if (x1 < 0)
+	{
+		src += -x1;
+		x1 = 0;
+	}
 	if (x2 > a_Target->width) x2 = a_Target->width;
-	if (y1 < 0) src += -y1 * width * numFrames, y1 = 0;
+	if (y1 < 0)
+	{
+		src += static_cast<size_t>(-y1 * width * numFrames);
+		y1 = 0;
+	}
 	if (y2 > a_Target->height) y2 = a_Target->height;
 	uint* dest = a_Target->pixels;
 	int xs;
@@ -54,7 +62,7 @@ void Tmpl8::Sprite::Draw(Surface* a_Target, int a_X, int a_Y)
 				if (c1 & 0xffffff) *(dest + addr + x) = c1;
 			}
 			addr += dpitch;
-			src += width * numFrames;
+			src += static_cast<size_t>(width * numFrames);
 		}
 	}
 }
@@ -79,7 +87,7 @@ void Tmpl8::Sprite::InitializeStartData()
 		for (int y = 0; y < height; ++y)
 		{
 			start[f][y] = width;
-			uint* addr = GetBuffer() + f * width + y * width * numFrames;
+			uint* addr = GetBuffer() + static_cast<size_t>(f * width + y * width * numFrames);
 			for (int x = 0; x < width; ++x) if (addr[x])
 			{
 				start[f][y] = x;
